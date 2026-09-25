@@ -154,7 +154,25 @@ Cross-fold audit: 36.8% of candidate pairs join a Source 2/3 record and a Source
 
 ### Leave-one-country-out (train on one country, validate on the other)
 
-<!-- COUNTRY -->
+`folds.py --scheme country` makes one fold per country: the model, the Indic lexicon and the calibration for the India fold are learned from US pairs only, and vice versa. This is the closest available simulation of the test split's France, which never appears in training.
+
+| held-out country | entities | macro F0.5 @ global thr | precision | recall | singleton acc | own best thr | F0.5 @ own thr |
+|---|---|---|---|---|---|---|---|
+| India (trained on US only) | 44671 | 0.9047 | 0.9846 | 0.8336 | 0.9480 | 0.12 | 0.9299 |
+| US (trained on India only) | 66658 | 0.9853 | 0.9928 | 0.9744 | 0.9772 | 0.83 | 0.9861 |
+
+| scheme | stage-1 OOF macro F0.5 | stage-2 OOF macro F0.5 | fold std |
+|---|---|---|---|
+| i.i.d. name-group folds (4) | 0.9906 | 0.9909 | 0.0003 |
+| leave-one-country-out (2) | 0.9667 | 0.9530 | 0.0403 |
+
+Reading:
+
+* **An unseen country costs 4-9 points, not 0.3.** The i.i.d. folds (std 0.0003) say nothing about it; this is the "folds are too easy" finding made concrete. India held out is the harder direction (Indic script, address styles, `Pvt Ltd` forms all unseen): 0.905 at the shared threshold, 0.948 at its own.
+* **The threshold does not transfer across countries** (0.12 vs 0.83): a model that has never seen a country is under-confident on it, so the training threshold under-links. Calibration cannot fix what the model has not seen (Platt a = 0.56, b = 0.94 here vs 0.81 / -0.07 i.i.d.).
+* **Stage 2 hurts under country shift** (stage-1 0.967 → stage-2 0.953): its context features are learned on the in-distribution spread of stage-1 probabilities, which the shifted country does not reproduce. For France, the stage-1 probabilities are the safer signal; `train.py --no-stage2` and `predict.py` (which honours the `stage2` flag in `model_meta.json`) make that a one-flag experiment.
+* For the real test split the situation is better than this simulation: France is 15 % of entities, Latin script, and the French tables in `textnorm.py` exist; India and the US (85 %) are in-distribution. The public leaderboard (~0.95 for the previous version) sits between the i.i.d. estimate and this stress number, which is consistent with a French deficit of roughly this size.
+
 
 ## 6. Leakage check results (after)
 
@@ -298,7 +316,30 @@ Country is deliberately **not** a feature (open label set: France is unseen); it
 
 ### 11.2 Ablation (OOF, strict folds, 150/100 boosting rounds, one group removed at a time)
 
-<!-- ABLATION_TABLE -->
+| removed group | #feats | macro F0.5 | delta F0.5 | recall | delta recall | precision | thr | fold std |
+|---|---|---|---|---|---|---|---|---|
+| baseline | 0 | 0.99089 | +0.00000 | 0.97621 | +0.00000 | 0.99836 | 0.75 | 0.00023 |
+| retrieval | 21 | 0.99087 | -0.00003 | 0.97634 | +0.00013 | 0.99822 | 0.73 | 0.00024 |
+| name_string | 11 | 0.99051 | -0.00039 | 0.97639 | +0.00018 | 0.99784 | 0.68 | 0.00030 |
+| name_tokens | 9 | 0.99069 | -0.00021 | 0.97699 | +0.00078 | 0.99774 | 0.65 | 0.00031 |
+| domain | 3 | 0.99082 | -0.00008 | 0.97602 | -0.00019 | 0.99835 | 0.75 | 0.00034 |
+| address_string | 8 | 0.99060 | -0.00030 | 0.97589 | -0.00032 | 0.99817 | 0.74 | 0.00037 |
+| address_tokens | 4 | 0.99083 | -0.00006 | 0.97647 | +0.00026 | 0.99810 | 0.71 | 0.00036 |
+| house_numbers | 12 | 0.98989 | -0.00101 | 0.97488 | -0.00132 | 0.99808 | 0.76 | 0.00019 |
+| legal_form | 4 | 0.99020 | -0.00070 | 0.97475 | -0.00145 | 0.99833 | 0.77 | 0.00030 |
+| record_flags | 8 | 0.99069 | -0.00021 | 0.97683 | +0.00062 | 0.99787 | 0.68 | 0.00033 |
+| crowding | 2 | 0.99088 | -0.00002 | 0.97663 | +0.00042 | 0.99805 | 0.70 | 0.00025 |
+| stage2 | 1 | 0.99044 | -0.00046 | 0.97414 | -0.00207 | 0.99826 | 0.79 | 0.00021 |
+
+Fold std of the baseline is 0.0002, so only deltas beyond ~0.0005 are signal. Reading:
+
+* **House numbers** (-0.0010 F0.5, -0.0013 recall) and **legal-form** features (-0.0007 F0.5, -0.0015 recall) are the two groups the model cannot do without; both act on recall, i.e. they rescue true pairs that the string similarities alone leave below the threshold (a truncated house number, `Pvt Ltd` vs `Private Limited`). The legal-form group is the one fed by the contextual legal extraction of section 3.
+* **Stage 2** is worth +0.0005 F0.5 / +0.002 recall in distribution, and negative under country shift (section 5). Keep it for US/India, consider stage 1 only for France.
+* **Name string similarities** (-0.0004) and **address strings** (-0.0003) matter but are redundant with each other and with the retrieval cosines; dropping the whole retrieval group (21 features) costs nothing because the string groups carry the same information. Nothing here should be removed on the strength of an importance ranking alone.
+* **Crowding, domain, address tokens, record flags** are individually within noise; they are cheap and kept. The "AI-generated feature reduction" concern is answered by this table: there is no group whose removal helps, and the two groups that hurt most are ones a gain-based ranking would not have flagged as top features.
+* The ablation baseline trains with **150/100 rounds** (vs 300/200 in the main run) and reaches the same F0.5 (0.99089 vs 0.99088): halving the boosting rounds halves the training stage (68 % of the runtime) for free.
+* Multilingual tokens: the `indic_script_only` scenario in section 9 (F0.5 0.996 on the Indic subset in distribution) and the India-held-out row in section 5 (0.905 without an Indic lexicon) bracket what the lexicon is worth: the transliteration is load-bearing and can only be learned from labels of the same country.
+
 
 ## 12. Remaining risks and recommended next experiments
 
