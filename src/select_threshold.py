@@ -1,16 +1,21 @@
-"""Step 4b: pick the acceptance threshold for the test set.
+"""Step 4b: pick the acceptance threshold for the test split under the expected prior shift.
 
-The test split has noticeably more Source 2/3 records per Source 1 entity than the
-training split (5.75 vs 4.68), i.e. more unmatched "decoy" records per entity. We
-estimate the decoy-density ratio r from *record counts only* (no test labels):
+The test split has more Source 2/3 records per Source 1 entity than training (5.75 vs
+4.68), i.e. more unmatched "decoy" records per entity. Two ways to transfer the threshold
+tuned on the training OOF predictions are compared here, both using record counts only
+(no test labels):
 
-    decoys per S1 = (#S2/S3 records / #S1 records) - (true matches per S1 in train)
-    r = decoys_per_S1(test) / decoys_per_S1(train)
+  density  : re-weight every false link caused by a decoy by r = decoys_per_S1(test) /
+             decoys_per_S1(train) in the OOF macro F0.5 and maximise (the previous method).
+  prior    : treat the calibrated probability as P(match | pair) under the training prior and
+             shift its odds by the change in the positive/negative pair ratio between
+             train and test candidate pairs, then keep the training threshold
+             (calibrate.shift_odds). Equivalent to moving the threshold on the training
+             scale; reported as such.
 
-and choose the threshold that maximises the out-of-fold macro F0.5 on train after
-weighting each false positive caused by a decoy record by r. With r = 1 this is
-exactly the plain OOF macro F0.5 optimisation done in train.py.
-Writes the chosen threshold into <work>/model_meta.json.
+Both are computed on the calibrated OOF probabilities (train.py writes p2_cal); the chosen
+threshold (on the calibrated scale) and the full analysis go to <work>/model_meta.json and
+<work>/threshold_analysis.json. --method chooses which one is written as `threshold`.
 """
 import json
 import os
@@ -18,37 +23,16 @@ import os
 import numpy as np
 import polars as pl
 
+import calibrate
 from common import base_args, log, split_dir
 from pair_features import truth_pairs
-
-
-def adjusted_macro_f05(best, thr, s1, n_true, r):
-    links = best.filter(pl.col("p2") >= thr).with_columns(
-        (pl.col("true_s") == pl.col("s_rid")).fill_null(False).alias("tp"),
-        pl.col("true_s").is_null().alias("decoy"),
-    )
-    agg = links.group_by("s_rid").agg(
-        pl.col("tp").sum().alias("tp"),
-        (~pl.col("tp") & pl.col("decoy")).sum().alias("fp_decoy"),
-        (~pl.col("tp") & ~pl.col("decoy")).sum().alias("fp_other"),
-    )
-    a = s1.join(agg, on="s_rid", how="left").join(n_true, on="s_rid", how="left").fill_null(0)
-    tp = a["tp"].to_numpy().astype(float)
-    fp = a["fp_other"].to_numpy() + r * a["fp_decoy"].to_numpy()
-    nt = a["nt"].to_numpy().astype(float)
-    npred = tp + fp
-    with np.errstate(divide="ignore", invalid="ignore"):
-        p = np.where(npred > 0, tp / npred, 0.0)
-        rc = np.where(nt > 0, tp / nt, 0.0)
-        f = np.where(p + rc > 0, 1.25 * p * rc / (0.25 * p + rc), 0.0)
-    f = np.where((nt == 0) & (npred == 0), 1.0, f)
-    f = np.where((nt == 0) & (npred > 0), 0.0, f)
-    return float(f.mean())
+from thresholds import best_threshold, default_grid, link_table, metrics_at, sweep
 
 
 def main():
     ap = base_args(__doc__)
     ap.add_argument("--ratio", type=float, default=None, help="override the estimated decoy-density ratio")
+    ap.add_argument("--method", choices=["density", "prior", "train"], default="density")
     args = ap.parse_args()
     dtr, dte = split_dir(args.work_dir, "train"), split_dir(args.work_dir, "test")
     rec = pl.read_parquet(os.path.join(dtr, "records.parquet"), columns=["rid", "entity_id", "src"])
@@ -61,26 +45,50 @@ def main():
     r = args.ratio if args.ratio is not None else max(1.0, dec_te / dec_tr)
     log(f"true matches/S1 (train) {m:.3f}; decoys/S1 train {dec_tr:.3f} test {dec_te:.3f}; ratio r={r:.3f}")
 
-    oof = pl.read_parquet(os.path.join(dtr, "oof.parquet"), columns=["t_rid", "s_rid", "p2"])
-    best = (
-        oof.sort("p2", descending=True).unique("t_rid", keep="first")
-        .join(truth.rename({"s_rid": "true_s"}), on="t_rid", how="left")
-    )
-    s1 = rec.filter(pl.col("src") == 1).select(pl.col("rid").cast(pl.UInt32).alias("s_rid"))
-    n_true = truth.group_by("s_rid").agg(pl.len().alias("nt"))
-    grid = np.round(np.arange(0.50, 0.96, 0.05), 2)
-    scores = {float(t): (adjusted_macro_f05(best, t, s1, n_true, 1.0), adjusted_macro_f05(best, t, s1, n_true, r)) for t in grid}
-    for t, (f1, fr) in scores.items():
-        log(f"thr={t:.2f}  OOF macro F0.5={f1:.5f}  density-adjusted={fr:.5f}")
-    thr = max(scores, key=lambda t: scores[t][1])
+    oof = pl.read_parquet(os.path.join(dtr, "oof.parquet"), columns=["t_rid", "s_rid", "label", "p2_cal"])
+    s1_rids = rec.filter(pl.col("src") == 1)["rid"].to_numpy().astype(np.uint32)
+    links, nt = link_table(oof.select("t_rid", "s_rid"), oof["p2_cal"].to_numpy(), truth, s1_rids)
+    grid = default_grid()
+    plain = sweep(links, nt, grid)
+    density = sweep(links, nt, grid, decoy_weight=r)
+    # prior shift: positive pairs / negative pairs among the candidates. Under the density model
+    # the negatives grow by the decoy share; the odds ratio is (neg_train / neg_test_expected).
+    y = oof["label"].to_numpy()
+    n_pos, n_neg = float(y.sum()), float((1 - y).sum())
+    # negative pairs that come from decoy records scale with r; the rest (wrong candidates of
+    # matched records) do not
+    matched_t = truth.select("t_rid").unique()
+    n_decoy_pairs = float(oof.join(matched_t, on="t_rid", how="anti").height)
+    neg_te = n_neg + (r - 1.0) * n_decoy_pairs
+    odds_ratio = (n_pos / neg_te) / (n_pos / n_neg)
+    shifted = calibrate.shift_odds(links["p"].to_numpy(), odds_ratio)
+    links_shift = links.with_columns(pl.Series("p", shifted))
+    prior_rows = sweep(links_shift, nt, grid, decoy_weight=r)
+    thr_train = best_threshold(plain)["threshold"]
+    prior_equiv = float(calibrate.sigmoid(calibrate.logit(thr_train) - np.log(odds_ratio)))  # same rule on the unshifted scale
+    choice = {"train": thr_train, "density": best_threshold(density)["threshold"], "prior": round(prior_equiv, 4)}
+    thr = choice[args.method]
+    analysis = {
+        "decoy_ratio": r, "odds_ratio_prior_shift": odds_ratio, "chosen_method": args.method, "threshold": thr,
+        "candidates": choice,
+        "oof_plain_at": {k: metrics_at(links, nt, v) for k, v in choice.items()},
+        "oof_density_adjusted_at": {k: metrics_at(links, nt, v, decoy_weight=r) for k, v in choice.items()},
+        "sweep_plain": plain, "sweep_density": density, "sweep_prior_shifted": prior_rows,
+    }
+    for k, v in choice.items():
+        log(f"{k:8s} thr={v:.3f}  OOF macro F0.5={analysis['oof_plain_at'][k]['macro_f05']:.5f}  "
+            f"density-adjusted={analysis['oof_density_adjusted_at'][k]['macro_f05']:.5f}")
+    with open(os.path.join(args.work_dir, "threshold_analysis.json"), "w") as f:
+        json.dump(analysis, f, indent=1)
     meta_path = os.path.join(args.work_dir, "model_meta.json")
     with open(meta_path) as f:
         meta = json.load(f)
-    meta.update({"threshold": thr, "decoy_ratio": r, "oof_macro_f05_at_threshold": scores[thr][0],
-                 "adjusted_macro_f05_at_threshold": scores[thr][1]})
+    meta.update({"threshold": thr, "threshold_method": args.method, "decoy_ratio": r, "threshold_candidates": choice,
+                 "oof_macro_f05_at_threshold": analysis["oof_plain_at"][args.method]["macro_f05"],
+                 "adjusted_macro_f05_at_threshold": analysis["oof_density_adjusted_at"][args.method]["macro_f05"]})
     with open(meta_path, "w") as f:
         json.dump(meta, f, indent=1)
-    log(f"selected threshold {thr}")
+    log(f"selected threshold {thr} ({args.method})")
 
 
 if __name__ == "__main__":

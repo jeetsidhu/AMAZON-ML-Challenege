@@ -20,9 +20,16 @@ in parallel over memory-mapped matrices) keeps the top --topk Source 1 records p
 Source 2/3 record. For every retrieved pair we also compute exact TF-IDF cosine
 similarities per block using *all* shared features (no df cap).
 
+--topk is the size of the candidate list that the matcher scores (pair_features.py keeps
+every retrieved pair): the previous version retrieved 10 per record, computed the exact
+cosines for all 10, and then threw 7 away. Recall@k of the retrieval (how often the true
+Source 1 entity is among the top k) is written to <work>/<split>/blocking_recall.json for
+the training split so the choice of k is measured, not assumed.
+
 Output: <work>/<split>/candidates_raw.parquet
   t_rid, s_rid, score, rank, cos_name, cos_addr, cos_cross
 """
+import json
 import multiprocessing as mp
 import os
 import shutil
@@ -31,7 +38,7 @@ import numpy as np
 import polars as pl
 import scipy.sparse as sp
 
-from common import base_args, log, n_workers, split_dir
+from common import Stage, base_args, log, n_workers, split_dir
 
 _G = {}
 
@@ -134,13 +141,15 @@ def rowwise_dot(A, B, ia, ib, chunk=1_000_000):
     return out
 
 
-def run_country(rec, country, args, tmp_root):
+def run_country(rec, country, args, tmp_root, keep_k=None):
+    """Returns (candidates DataFrame with exact cosines for rank < keep_k, diagnostic DataFrame of
+    (t_rid, s_rid, rank) for every retrieved pair or None when keep_k is None)."""
     S = rec.filter((pl.col("src") == 1) & (pl.col("country") == country)).select("rid", *BLOCKS)
     T = rec.filter((pl.col("src") != 1) & (pl.col("country") == country)).select("rid", *BLOCKS)
     nS, nT = S.height, T.height
     log(f"[{country}] S1={nS} T={nT}")
     if nS == 0 or nT == 0:
-        return None
+        return None, None
     s_rid = S["rid"].to_numpy()
     t_rid = T["rid"].to_numpy()
     S = S.with_row_index("lrow")
@@ -187,6 +196,11 @@ def run_country(rec, country, args, tmp_root):
     rank = np.concatenate([r[3] for r in res])
     del res
     log(f"[{country}] pairs retrieved {len(tl)}")
+    diag = None
+    if keep_k is not None:
+        diag = pl.DataFrame({"t_rid": t_rid[tl].astype(np.uint32), "s_rid": s_rid[sl].astype(np.uint32), "rank": rank})
+        sel = rank < keep_k  # exact cosines only for the pairs that will actually be scored
+        tl, sl, score, rank = tl[sel], sl[sel], score[sel], rank[sel]
 
     # ---- exact per-block cosines with all shared features (no df cap)
     cos = []
@@ -204,28 +218,50 @@ def run_country(rec, country, args, tmp_root):
         "cos_name": cos[0],
         "cos_addr": cos[1],
         "cos_cross": cos[2],
-    })
+    }), diag
 
 
 def main():
     ap = base_args(__doc__)
     ap.add_argument("--split", required=True, choices=["train", "test"])
     ap.add_argument("--df-cap", type=int, default=1000)
-    ap.add_argument("--topk", type=int, default=10)
-    ap.add_argument("--min-score", type=float, default=0.05)
+    ap.add_argument("--topk", type=int, default=3, help="candidates per Source 2/3 record (= the scored set)")
+    ap.add_argument("--min-score", type=float, default=0.1)
+    ap.add_argument("--recall-k", type=int, default=10,
+                    help="train split only: also measure retrieval recall up to this rank (diagnostic, not kept)")
     ap.add_argument("--chunk", type=int, default=4000)
     args = ap.parse_args()
+    with Stage(args.work_dir, "blocking_" + args.split):
+        run(args)
+
+
+def run(args):
     d = split_dir(args.work_dir, args.split)
     rec = pl.read_parquet(os.path.join(d, "records.parquet"), columns=["rid", "src", "country", *BLOCKS])
     rec = rec.with_columns(pl.col("country").fill_null(""))
     countries = rec.filter(pl.col("src") == 1)["country"].unique().sort().to_list()
     tmp_root = os.path.join(d, "block_tmp")
-    outs = []
+    outs, diags = [], []
+    diag = args.split == "train" and args.recall_k > args.topk
+    keep_k = args.topk
+    if diag:
+        args.topk = args.recall_k  # retrieve deeper once, only to measure recall@k (cosines stay top-keep_k)
     for c in countries:
-        r = run_country(rec, c, args, tmp_root)
+        r, dg = run_country(rec, c, args, tmp_root, keep_k if diag else None)
         if r is not None:
             outs.append(r)
+            if dg is not None:
+                diags.append(dg)
     cand = pl.concat(outs)
+    if diag:
+        from pair_features import truth_pairs  # noqa: E402  (label use is diagnostic only)
+        ids = pl.read_parquet(os.path.join(d, "records.parquet"), columns=["rid", "entity_id"])
+        truth = truth_pairs(ids, args.data_dir)
+        hit = truth.join(pl.concat(diags), on=["t_rid", "s_rid"], how="left")
+        rec_at = {k: float((hit["rank"].fill_null(10**6) < k).mean()) for k in range(1, args.recall_k + 1)}
+        with open(os.path.join(d, "blocking_recall.json"), "w") as f:
+            json.dump({"n_true_pairs": truth.height, "recall_at_k": rec_at, "topk_kept": keep_k}, f, indent=1)
+        log("retrieval recall@k (true pairs found within rank k):", {k: round(v, 4) for k, v in rec_at.items()})
     cand.write_parquet(os.path.join(d, "candidates_raw.parquet"))
     log("candidates_raw", cand.shape)
 

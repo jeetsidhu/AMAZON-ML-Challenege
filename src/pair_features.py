@@ -1,8 +1,9 @@
 """Step 3: candidate selection + pairwise features.
 
 Candidate set (this is exactly what the matching model scores, and what is written
-to candidate_pairs.tsv): retrieved pairs with rank < --max-rank for their Source 2/3
-record and retrieval score >= --min-score.
+to candidate_pairs.tsv): every pair retrieved by blocking.py (--topk / --min-score there).
+--max-rank / --min-score here only exist to *tighten* the set for experiments; by default
+nothing is filtered a second time.
 
 Features (all country-agnostic; the country label itself is never a feature):
   retrieval  : score, rank, per-block TF-IDF cosines, gaps to the best candidate of the
@@ -31,15 +32,19 @@ import polars as pl
 from rapidfuzz import fuzz, process
 from rapidfuzz.distance import JaroWinkler
 
-from common import base_args, log, n_workers, read_tsv, split_dir
+from common import Stage, base_args, log, n_workers, read_tsv, split_dir
 
 REC_COLS = ["rid", "entity_id", "src", "country", "n_full", "n_core", "n_parts", "n_compact", "n_domain", "n_legal",
             "f_indic", "f_alias", "a_norm", "a_comp", "a_num", "a_hn", "a_street", "a_key"]
 _POOL = None
 
 
-def select_candidates(cand, max_rank, min_score):
-    return cand.filter((pl.col("rank") < max_rank) & (pl.col("score") >= min_score))
+def select_candidates(cand, max_rank=None, min_score=None):
+    if max_rank is not None:
+        cand = cand.filter(pl.col("rank") < max_rank)
+    if min_score is not None:
+        cand = cand.filter(pl.col("score") >= min_score)
+    return cand
 
 
 def context_features(c):
@@ -351,10 +356,15 @@ def truth_pairs(rec, data_dir):
 def main():
     ap = base_args(__doc__)
     ap.add_argument("--split", required=True, choices=["train", "test"])
-    ap.add_argument("--max-rank", type=int, default=3)
-    ap.add_argument("--min-score", type=float, default=0.1)
+    ap.add_argument("--max-rank", type=int, default=None, help="experiments only: keep rank < this")
+    ap.add_argument("--min-score", type=float, default=None, help="experiments only: keep score >= this")
     ap.add_argument("--chunk", type=int, default=2_000_000)
     args = ap.parse_args()
+    with Stage(args.work_dir, "features_" + args.split):
+        run(args)
+
+
+def run(args):
     d = split_dir(args.work_dir, args.split)
     rec = address_crowding(pl.read_parquet(os.path.join(d, "records.parquet"), columns=REC_COLS))
     cand = select_candidates(pl.read_parquet(os.path.join(d, "candidates_raw.parquet")), args.max_rank, args.min_score)

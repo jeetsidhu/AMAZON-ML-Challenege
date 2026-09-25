@@ -11,7 +11,8 @@ import lightgbm as lgb
 import numpy as np
 import polars as pl
 
-from common import base_args, log, split_dir
+import calibrate
+from common import Stage, base_args, log, split_dir
 from decode import decode
 from model import assign, house_numbers, iter_parts, part_files, stage2_context, to_np
 
@@ -34,13 +35,21 @@ def main():
     ap.add_argument("--decoder", choices=["threshold", "expected_f"], default=None,
                     help="override the decision rule chosen by select_threshold.py")
     args = ap.parse_args()
+    with Stage(args.work_dir, "predict"):
+        run(args)
+
+
+def run(args):
     d = split_dir(args.work_dir, "test")
     with open(os.path.join(args.work_dir, "model_meta.json")) as f:
         meta_json = json.load(f)
     thr = args.threshold if args.threshold is not None else meta_json["threshold"]
     f1 = meta_json["f1"]
     m1 = lgb.Booster(model_file=os.path.join(args.work_dir, "stage1.txt"))
-    m2 = lgb.Booster(model_file=os.path.join(args.work_dir, "stage2.txt"))
+    use_stage2 = meta_json.get("stage2", True)
+    m2 = lgb.Booster(model_file=os.path.join(args.work_dir, "stage2.txt")) if use_stage2 else None
+    cal_path = os.path.join(args.work_dir, "calibration.json")
+    cal = calibrate.load(cal_path) if os.path.exists(cal_path) else None
 
     files = part_files(d)
     meta = pl.concat(list(iter_parts(files, ["pid", "t_rid", "s_rid"]))).sort("pid")
@@ -50,11 +59,16 @@ def main():
     for df in iter_parts(files):
         pid = df["pid"].to_numpy()
         p1[pid] = m1.predict(to_np(df, f1))
-    C, _ = stage2_context(meta, p1, house_numbers(d))
-    p2 = np.zeros(n, dtype=np.float32)
-    for df in iter_parts(files):
-        pid = df["pid"].to_numpy()
-        p2[pid] = m2.predict(np.hstack([to_np(df, f1), p1[pid, None], C[pid]]))
+    if use_stage2:
+        C, _ = stage2_context(meta, p1, house_numbers(d))
+        p2 = np.zeros(n, dtype=np.float32)
+        for df in iter_parts(files):
+            pid = df["pid"].to_numpy()
+            p2[pid] = m2.predict(np.hstack([to_np(df, f1), p1[pid, None], C[pid]]))
+    else:
+        p2 = p1
+    # the threshold was tuned on the calibrated scale (train.py); apply the same calibrator here
+    p2 = calibrate.apply(cal, p2).astype(np.float32) if meta_json.get("threshold_scale") == "calibrated" else p2
     decoder = args.decoder or meta_json.get("decoder", "threshold")
     if decoder == "expected_f":
         links = decode(meta, p2)

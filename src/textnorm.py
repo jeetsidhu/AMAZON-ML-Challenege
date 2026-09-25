@@ -7,6 +7,7 @@ Indic-script -> Latin lexicon that is *learned from the training ground truth*
 import re
 import unicodedata
 
+from rapidfuzz import fuzz
 from unidecode import unidecode
 
 INDIC_RE = re.compile(r"[ऀ-෿]")
@@ -29,49 +30,70 @@ NONALNUM_RE = re.compile(r"[^a-z0-9]+")
 DIGITS_RE = re.compile(r"\d+")
 
 # ---------------------------------------------------------------- name tables
+# Canonical forms collapse spelling variants onto ONE short form. The direction is always
+# long -> short: "technologies" / "technology" -> "tech" (never "tech" -> "technologies",
+# which would turn "Tech Mahindra" into "technologies mahindra"). A short token is therefore
+# never expanded into something it may not mean; only unambiguous long forms are shortened.
 NAME_CANON = {
     "incorporated": "inc", "corporation": "corp", "company": "co", "cos": "co",
     "limited": "ltd", "private": "pvt", "centre": "center", "brothers": "bros",
-    "and": "&", "et": "&", "sri": "shri", "shree": "shri", "intl": "international",
-    "mfg": "manufacturing", "svcs": "services", "assoc": "associates", "tech": "technologies",
-    "technology": "technologies", "hosp": "hospital",
+    "and": "&", "et": "&", "sri": "shri", "shree": "shri", "international": "intl",
+    "manufacturing": "mfg", "services": "svcs", "service": "svc", "associates": "assoc",
+    "technologies": "tech", "technology": "tech", "hospital": "hosp",
     "etablissements": "ets", "etablissement": "ets", "etabl": "ets", "compagnie": "cie",
+    "societe": "ste", "pvtltd": "pvt ltd", "corpn": "corp",
 }
-LEGAL = {
-    "inc", "corp", "co", "ltd", "pvt", "llc", "llp", "lp", "plc", "pllc", "pc", "pa", "ltda",
-    "sarl", "sas", "sasu", "sa", "sci", "eurl", "snc", "cie", "gmbh", "ag", "bv", "nv", "opc",
-    "ei", "selarl", "scop", "gie", "scm", "sca",
+# Legal-form tokens. STRICT ones are never anything but a legal form, so they are removed
+# from the core name wherever they appear (corrupted records shuffle tokens: "Federal LLC
+# Minerals Star"). WEAK ones are also ordinary words or initials ("PC World", "Ag Supply",
+# "SA Toys", "Co-op", "PA Impex"), so they are only removed in a legal *position*: at the end
+# of the name, right after "&" ("Tiffany & Co"), or next to another legal token ("Co Ltd").
+STRICT_LEGAL = {
+    "inc", "corp", "ltd", "pvt", "llc", "llp", "plc", "pllc", "ltda", "sarl", "sas", "sasu",
+    "eurl", "gmbh", "opc", "selarl", "scop", "gie", "snc", "sca", "scm", "sci",
 }
+WEAK_LEGAL = {"co", "lp", "pc", "pa", "sa", "ag", "bv", "nv", "ei", "cie"}
+LEGAL = STRICT_LEGAL | WEAK_LEGAL
+# Articles / connectives / honorifics: dropped from the core name only when at least two
+# other tokens remain, so "The One", "La Poste", "El Lincoln" keep their identity, while
+# "The Dent Diner" -> "dent diner". They are always kept in the full name.
 NAME_STOP = {
     "the", "of", "&", "mr", "mrs", "ms", "dr", "smt", "messrs", "de", "du", "des", "la", "le",
-    "les", "d", "l", "a", "an", "en", "au", "aux", "for",
+    "les", "el", "los", "las", "d", "l", "a", "an", "en", "au", "aux", "for",
 }
+MIN_CORE = 2
+MIN_CORE_COUNTRY = 3  # tokens that must remain before a trailing country token is treated as a tag
+PAREN_RE = re.compile(r"\(([^()]*)\)")
 
 # ------------------------------------------------------------- address tables
 ADDR_CANON = {
-    "street": "st", "str": "st", "road": "rd", "avenue": "ave", "av": "ave", "avenu": "ave",
-    "boulevard": "blvd", "bd": "blvd", "boul": "blvd", "bld": "blvd", "drive": "dr", "court": "ct",
+    "street": "st", "str": "st", "road": "rd", "avenue": "ave", "avenu": "ave",
+    "boulevard": "blvd", "boul": "blvd", "bld": "blvd", "drive": "dr", "court": "ct",
     "lane": "ln", "place": "pl", "circle": "cir", "highway": "hwy", "parkway": "pkwy",
     "terrace": "ter", "trail": "trl", "square": "sq", "north": "n", "south": "s", "east": "e",
     "west": "w", "northeast": "ne", "northwest": "nw", "southeast": "se", "southwest": "sw",
     "suite": "ste", "apartment": "apt", "appartement": "apt", "appt": "apt", "building": "bldg",
     "floor": "fl", "flr": "fl", "number": "no", "nr": "near", "opposite": "opp", "saint": "st",
     "sainte": "ste", "mount": "mt", "fort": "ft", "point": "pt", "route": "rte", "expressway": "expy",
-    "freeway": "fwy", "crossing": "xing", "r": "rue", "impasse": "imp", "allee": "all",
+    "freeway": "fwy", "crossing": "xing", "impasse": "imp", "allee": "all",
     "allees": "all", "chemin": "che", "cours": "crs", "quai": "qu", "residence": "res",
     "faubourg": "fbg", "chaussee": "chau", "hno": "no", "house": "h", "sector": "sec",
     "sect": "sec", "nagar": "ngr", "marg": "mg", "colony": "col", "district": "dist",
     "township": "twp", "junction": "jn", "extension": "extn", "ext": "extn", "gali": "gali",
     "bengaluru": "bangalore", "gurugram": "gurgaon", "calcutta": "kolkata", "bombay": "mumbai",
     "madras": "chennai", "centre": "center", "first": "1st", "second": "2nd", "third": "3rd",
-    "bvld": "blvd", "bvd": "blvd", "q": "qu", "ch": "che", "etage": "fl", "ndeg": "no",
+    "bvld": "blvd", "bvd": "blvd", "etage": "fl", "ndeg": "no",
 }
+# One- and two-letter French street abbreviations are only unambiguous in France: "R K Puram"
+# (an Indian locality) must not become "rue k puram", and "Q" / "CH" are ordinary tokens elsewhere.
+ADDR_CANON_FR = {"r": "rue", "q": "qu", "ch": "che", "bd": "blvd", "av": "ave"}
+FR_COUNTRY_TOKENS = {"france", "fr"}
 ADDR_STOP = {
     "de", "du", "des", "la", "le", "les", "d", "l", "of", "the", "and", "&", "au", "aux",
     "no", "eme",
 }
 # canonical street-type / direction / unit words: never used as "key" tokens in combined blocking keys
-ADDR_GENERIC = set(ADDR_CANON.values()) | {
+ADDR_GENERIC = set(ADDR_CANON.values()) | set(ADDR_CANON_FR.values()) | {
     "rue", "city", "town", "county", "village", "unit", "apt", "ste", "fl", "bldg", "floor", "po",
     "box", "near", "opp", "road", "main", "cross", "center", "plot", "flat", "shop", "office",
     "phase", "block", "complex", "tower", "society", "market", "chowk", "bazar", "industrial",
@@ -168,13 +190,88 @@ def _translit_name(raw):
     return " ".join(out)
 
 
-def _name_tokens(part, drop=frozenset()):
-    """Normalise one alias part of a name -> (all tokens, core tokens, domain stems, legal tokens).
+def _country_tag(text, country_toks):
+    """True when a parenthesised chunk is the record's own country label, e.g. "(India)",
+    including OCR-style corruptions such as "(lndia)" / "(1ndia)" (ratio >= 80)."""
+    if not country_toks:
+        return False
+    toks = latin_tokens(text)
+    if not toks:
+        return False
+    a, b = "".join(toks), "".join(country_toks)
+    return a == b or (len(a) >= 3 and fuzz.ratio(a, b) >= 80)
 
-    `drop` holds the tokens of the record's own country label: a "(France)" / "(India)" tag
-    inserted into a name carries no identity information.
+
+def _merge_initials(toks):
+    """Runs of single-letter tokens (optionally glued by "&") become one token:
+    "j p morgan" -> "jp morgan", "d & l metro" -> "dl metro", "l a fitness" -> "la fitness".
+    A lone single letter next to a longer token is left alone ("orelee s barbershop")."""
+    out, run = [], []
+
+    def flush():
+        if len(run) >= 2:
+            out.append("".join(run))
+        else:
+            out.extend(run)
+        run.clear()
+
+    for t in toks:
+        if len(t) == 1 and t != "&":
+            run.append(t)
+        elif t == "&" and run:
+            continue  # "&" between initials is glue; it is dropped from the core anyway
+        else:
+            flush()
+            out.append(t)
+    flush()
+    return out
+
+
+def _strip_legal(toks):
+    """Removes legal-form tokens from the core name (see STRICT_LEGAL / WEAK_LEGAL).
+    Returns (remaining tokens, removed legal tokens)."""
+    legal, keep = [], []
+    n = len(toks)
+    for i, t in enumerate(toks):
+        if t in STRICT_LEGAL:
+            legal.append(t)
+            continue
+        if t in WEAK_LEGAL:
+            trailing = all(x in LEGAL or x in NAME_STOP for x in toks[i + 1:])
+            after_amp = i > 0 and toks[i - 1] == "&"
+            next_legal = (i + 1 < n and toks[i + 1] in LEGAL) or (i > 0 and toks[i - 1] in LEGAL)
+            if trailing or after_amp or next_legal:
+                legal.append(t)
+                continue
+        keep.append(t)
+    return keep, legal
+
+
+def _strip_trailing_country(toks, country_toks):
+    """"Tata Consultancy Services India" -> drop the trailing country token, but only when
+    at least MIN_CORE_COUNTRY other content tokens remain: "Air India", "Reliance India" and
+    "Toys R Us" keep it. Being conservative is cheap: an extra trailing token on one side is
+    handled by the token-set / extra-token features, whereas a deleted token is gone."""
+    k = len(country_toks)
+    if not k or len(toks) < k + MIN_CORE_COUNTRY:
+        return toks
+    if toks[-k:] == list(country_toks):
+        rest = toks[:-k]
+        if sum(1 for t in rest if t not in NAME_STOP) >= MIN_CORE_COUNTRY:
+            return rest
+    return toks
+
+
+def _name_tokens(part, country_toks=()):
+    """Normalise one alias part of a name -> (full tokens, core tokens, domain stems, legal tokens).
+
+    `country_toks` are the tokens of the record's own country label. A parenthesised country tag
+    "(India)" carries no identity and is removed everywhere; a bare country token is kept in the
+    full name and only dropped from the core when it is a trailing location tag (see
+    _strip_trailing_country) -- "Air India" is not "Air".
     """
     s = to_ascii(part)
+    s = PAREN_RE.sub(lambda m: " " if _country_tag(m.group(1), country_toks) else " " + m.group(1) + " ", s)
     s = s.replace("&", " & ").replace("+", " & ")
     domains = []
     toks = []
@@ -183,19 +280,20 @@ def _name_tokens(part, drop=frozenset()):
         if m:
             domains.append(m.group(1).replace("-", ""))
             continue
-        raw = raw.replace(".", "").replace("'", "").replace("’", "")
+        raw = raw.replace(".", "").replace("'", "").replace("\u2019", "")
         for t in latin_tokens(raw) if raw != "&" else ["&"]:
-            if t in drop:
-                continue
-            toks.append(NAME_CANON.get(t, t))
+            toks.extend(NAME_CANON.get(t, t).split())
+    toks = _merge_initials(toks)
     full = [t for t in toks if t != "&"]
-    core, seen = [], set()
-    for t in toks:
-        if t in LEGAL or t in NAME_STOP or t in seen:
-            continue
-        seen.add(t)
-        core.append(t)
-    legal = [t for t in toks if t in LEGAL and t != "cie"]
+    core, legal = _strip_legal(toks)
+    core = _strip_trailing_country(core, tuple(country_toks))
+    content = [t for t in core if t not in NAME_STOP]
+    if len(content) >= MIN_CORE:
+        core = content
+    else:
+        core = [t for t in core if t != "&"]
+    core = list(dict.fromkeys(core))
+    legal = [t for t in legal if t != "cie"]
     return full, core, domains, legal
 
 
@@ -203,7 +301,7 @@ def norm_name(raw, country=None):
     """Returns dict with normalised name fields."""
     if raw is None:
         raw = ""
-    drop = frozenset(latin_tokens(to_ascii(country))) if country else frozenset()
+    country_toks = tuple(latin_tokens(to_ascii(country))) if country else ()
     is_indic = bool(INDIC_RE.search(raw))
     s = ID_RE.sub(" ", raw)
     s = MS_RE.sub(" ", s)
@@ -214,7 +312,7 @@ def norm_name(raw, country=None):
         parts = [""]
     fulls, cores, compacts, all_domains, legals = [], [], [], [], []
     for p in parts:
-        full, core, domains, legal = _name_tokens(p, drop)
+        full, core, domains, legal = _name_tokens(p, country_toks)
         if full or core:
             fulls.append(" ".join(full))
             cores.append(" ".join(core))
@@ -257,12 +355,17 @@ UNIT_WORDS = {"unit", "apt", "ste", "fl", "bldg", "room", "rm", "po", "box"}
 STATE_CODES = set(US_STATES.values()) | set(IN_STATES.values()) | set(FR_ADMIN.values())
 
 
-def norm_addr(raw):
+def norm_addr(raw, country=None):
     """Returns dict: a_norm (tokens), a_comp (components joined by ','), a_num (digit groups),
     a_hn (house number: first digit group of the street line), a_street (non-numeric tokens of
-    the street line) and a_key (distinctive non-numeric tokens used in combined blocking keys)."""
+    the street line) and a_key (distinctive non-numeric tokens used in combined blocking keys).
+
+    `country` gates the ambiguous French abbreviations (ADDR_CANON_FR)."""
     if raw is None:
         raw = ""
+    canon = ADDR_CANON
+    if country and to_ascii(country).strip() in FR_COUNTRY_TOKENS:
+        canon = {**ADDR_CANON, **ADDR_CANON_FR}
     s = NULL_RE.sub(" ", raw)
     s = POBOX_RE.sub(" ", s)
     s = NUMSIGN_RE.sub(" ", s)
@@ -282,8 +385,10 @@ def norm_addr(raw):
         for t in toks:
             if t.isdigit():
                 t = t.lstrip("0") or "0"
-            t = ADDR_CANON.get(t, t)
-            if t in ADDR_STOP:
+            t = canon.get(t, t)
+            if t in ADDR_STOP and len(toks) > 1:
+                # articles are dropped inside a component, but a component that IS the token is
+                # kept: "DE" (Delaware) and "LA" (Louisiana) are state codes, not French articles
                 continue
             out.append(t)
         if out:
@@ -347,7 +452,7 @@ def blocking_features(n, a):
 
 def normalize_record(name, addr, country=None):
     n = norm_name(name, country)
-    a = norm_addr(addr)
+    a = norm_addr(addr, country)
     fn, fa, fc = blocking_features(n, a)
     n.update(a)
     n["feat_name"] = fn

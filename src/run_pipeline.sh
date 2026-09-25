@@ -8,6 +8,7 @@ OUT="${3:-output}"
 SRC="$(cd "$(dirname "$0")" && pwd)"
 PY="${PYTHON:-python}"
 
+"$PY" "$SRC/folds.py"         --data-dir "$DATA" --work-dir "$WORK"   # folds first: preprocessing is fit per fold
 "$PY" "$SRC/build_lexicon.py" --data-dir "$DATA" --work-dir "$WORK"
 for SPLIT in train test; do
   "$PY" "$SRC/prepare.py"       --data-dir "$DATA" --work-dir "$WORK" --split "$SPLIT"
@@ -15,6 +16,7 @@ for SPLIT in train test; do
   "$PY" "$SRC/pair_features.py" --data-dir "$DATA" --work-dir "$WORK" --split "$SPLIT"
 done
 "$PY" "$SRC/train.py"            --data-dir "$DATA" --work-dir "$WORK"
+"$PY" "$SRC/leakage_check.py"    --data-dir "$DATA" --work-dir "$WORK"
 "$PY" "$SRC/select_threshold.py" --data-dir "$DATA" --work-dir "$WORK"
 "$PY" "$SRC/predict.py"          --data-dir "$DATA" --work-dir "$WORK" --out-dir "$OUT"
 "$PY" "$SRC/validate_submission.py" --matching "$OUT/matching_results.tsv" \
