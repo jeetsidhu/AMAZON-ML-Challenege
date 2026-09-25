@@ -11,6 +11,7 @@
 #
 # Environment overrides (all optional):
 #   DATA=dataset  WORK=work  OUT=output  LOGS=logs  ROUNDS1=150  ROUNDS2=100  PY=python3
+#   POST_STEP_CMD="bash tools/sync_outputs.sh my-run"   # run after every finished step (e.g. push outputs)
 #
 # Every step writes logs/<nn>_<step>.log, prints its wall time, and leaves $WORK/.done/<step>
 # so a crashed or interrupted run continues where it stopped. Run it under nohup or tmux:
@@ -53,6 +54,9 @@ step() {  # step <name> <command...>
   if ( set -e; "$@" ) > "$LOGS/$tag.log" 2>&1; then
     touch "$WORK/.done/$name"
     log "done  $tag in $(( $(date +%s) - t0 ))s"
+    if [ -n "${POST_STEP_CMD:-}" ]; then
+      bash -c "$POST_STEP_CMD" >> "$LOGS/post_step.log" 2>&1 && log "post-step hook ok" || log "post-step hook FAILED (see $LOGS/post_step.log); continuing"
+    fi
   else
     log "FAIL  $tag after $(( $(date +%s) - t0 ))s -- see $LOGS/$tag.log (last lines below)"
     tail -n 25 "$LOGS/$tag.log" | tee -a "$LOGS/run.log"
