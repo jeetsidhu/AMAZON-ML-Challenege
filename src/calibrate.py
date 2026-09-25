@@ -23,6 +23,7 @@ import json
 import numpy as np
 
 EPS = 1e-6
+LOGIT_CLIP = 12.0  # |logit| cap for the Platt input: raw scores at 1e-6 are not more informative than at 1e-5
 
 
 def logit(p):
@@ -30,26 +31,55 @@ def logit(p):
     return np.log(p / (1 - p))
 
 
+def _log_loss(z, y):
+    # numerically stable mean log-loss of logits z
+    return float(np.mean(np.logaddexp(0.0, -z) * y + np.logaddexp(0.0, z) * (1 - y)))
+
+
 def sigmoid(z):
     return 1.0 / (1.0 + np.exp(-z))
 
 
 # ------------------------------------------------------------------ Platt
-def fit_platt(p, y, iters=50, l2=1e-4):
-    """Newton's method on the 2-parameter logistic regression y ~ sigmoid(a*logit(p)+b)."""
-    x = logit(p)
+def fit_platt(p, y, iters=100, l2=1e-3):
+    """Damped Newton's method on the 2-parameter logistic regression y ~ sigmoid(a*logit(p)+b).
+
+    Plain Newton steps overshoot on (near-)separable data - the score of a good matcher is
+    close to separable - and diverge to |a| ~ 1e10. Each step is therefore halved until the
+    (L2-regularised, towards a=1 / b=0) log-loss decreases, and the identity calibration is
+    returned if the fit does not beat it. Input logits are clipped to +-LOGIT_CLIP."""
+    x = np.clip(logit(p), -LOGIT_CLIP, LOGIT_CLIP)
     y = np.asarray(y, dtype=np.float64)
+    n = len(y)
+
+    def objective(a, b):
+        return _log_loss(a * x + b, y) + 0.5 * l2 * ((a - 1) ** 2 + b ** 2) / n
+
     a, b = 1.0, 0.0
+    cur = objective(a, b)
     for _ in range(iters):
         q = sigmoid(a * x + b)
         w = q * (1 - q) + 1e-12
-        g = np.array([np.sum((q - y) * x) + l2 * (a - 1), np.sum(q - y)])
-        h = np.array([[np.sum(w * x * x) + l2, np.sum(w * x)], [np.sum(w * x), np.sum(w)]])
+        g = np.array([np.sum((q - y) * x) + l2 * (a - 1), np.sum(q - y) + l2 * b]) / n
+        h = np.array([[np.sum(w * x * x) + l2, np.sum(w * x)], [np.sum(w * x), np.sum(w) + l2]]) / n
         step = np.linalg.solve(h, g)
-        a, b = a - step[0], b - step[1]
-        if np.abs(step).max() < 1e-8:
+        t = 1.0
+        while t > 1e-6:  # backtracking line search
+            na, nb = a - t * step[0], b - t * step[1]
+            new = objective(na, nb)
+            if new < cur:
+                break
+            t *= 0.5
+        else:
             break
-    return {"method": "platt", "a": float(a), "b": float(b)}
+        moved = max(abs(na - a), abs(nb - b))
+        a, b, cur = na, nb, new
+        if moved < 1e-9:
+            break
+    cal = {"method": "platt", "a": float(a), "b": float(b), "log_loss": cur, "identity_log_loss": objective(1.0, 0.0)}
+    if not np.isfinite(cur) or cur > cal["identity_log_loss"] or not (1e-3 < abs(a) < 1e3):
+        cal.update({"a": 1.0, "b": 0.0, "fallback": "identity"})
+    return cal
 
 
 # ------------------------------------------------------------------ isotonic (PAV)
@@ -85,7 +115,7 @@ def apply(cal, p):
     if cal is None or cal.get("method") == "identity":
         return p
     if cal["method"] == "platt":
-        return sigmoid(cal["a"] * logit(p) + cal["b"])
+        return sigmoid(cal["a"] * np.clip(logit(p), -LOGIT_CLIP, LOGIT_CLIP) + cal["b"])
     if cal["method"] == "isotonic":
         x, y = np.asarray(cal["x"]), np.asarray(cal["y"])
         idx = np.clip(np.searchsorted(x, p, side="right") - 1, 0, len(y) - 1)

@@ -61,7 +61,7 @@ def main():
     t_info = rec.select(pl.col("rid").cast(pl.UInt32).alias("t_rid"), "src", "f_indic")
     oof = oof.join(t_info, on="t_rid", how="left")
     matched_t = truth.select("t_rid").unique()
-    oof = oof.with_columns(pl.col("t_rid").is_in(matched_t["t_rid"]).alias("t_matched"))
+    oof = oof.with_columns(pl.col("t_rid").is_in(matched_t["t_rid"].implode()).alias("t_matched"))
     rng = np.random.default_rng(args.seed)
     n_pos, n_neg = float(y.sum()), float((1 - y).sum())
     n_decoy_pairs = float(oof.filter(~pl.col("t_matched")).height)
