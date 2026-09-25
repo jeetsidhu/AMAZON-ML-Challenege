@@ -276,5 +276,48 @@ Findings:
 
 ## 11. Feature engineering: what is generated and what it is worth
 
-<!-- ABLATION -->
+### 11.1 Inventory
+
+Stage-1 features (82 on this data) are generated in `pair_features.py`; nothing is selected or removed automatically - LightGBM sees all of them and `train.py --drop-features` / `tools/ablation.py` remove groups explicitly. The earlier notebook's AI-suggested feature reduction was not carried into this code base; the table below is the measured basis for any reduction.
+
+| group | features | what it encodes |
+|---|---|---|
+| retrieval (21) | `score`, `rank`, `cos_name/addr/cross`, `t_best*`, `t_second`, `t_ncand`, `gap_*`, `s_ncand`, `s_rank`, `s_best`, `s_ntop1`, `s_gap_best` | blocking similarity and the *competition* around the pair: how far the candidate is from the best one for this record, and how many records compete for this entity |
+| name_string (13) | `nm_ratio`, `nm_core_ratio`, `nm_tsort`, `nm_tset`, `nm_partial`, `nm_jw`, `nm_part_max/min`, `nm_first_ratio`, `cmp_ratio`, `cmp_jw` | rapidfuzz similarities on full / core names, alias parts and the compact (space-less) name; typos, token order, concatenation |
+| name_tokens (9) | `t_ntok`, `s_ntok`, `nm_common`, `nm_jacc`, `nm_cov_s/t`, `nm_xt`, `nm_xs`, `t_n_namesake` | token overlap, typo-tolerant extra tokens on each side, how many candidates of the record carry the same name (namesakes) |
+| domain (3) | `dom_prefix`, `dom_full`, `t_domain` | domain-style names (`laborerslocal207.com`) against the compact name |
+| address_string (8) | `ad_ratio/tsort/tset/partial`, `street_ratio/tset`, `st_ratio`, `st_eq` | address and street-line similarity |
+| address_tokens (4) | `t_natok`, `s_natok`, `ad_common`, `ad_jacc` | address token overlap |
+| house_numbers (12) | `hn_rel`, `hn_logdiff`, `hn_reldiff`, `hn_s_in_t`, `hn_t_in_s`, `hn_lendiff`, `num_common`, `num_frac`, `num_first_eq`, `t_nnum`, `s_nnum`, `t_n_addr_exact` | relation between the house numbers (equal / truncated / one digit off / transposed / a few doors away), digit-group overlap |
+| legal_form (4) | `lg_t`, `lg_s`, `lg_common`, `lg_conflict` | legal suffixes on each side and whether they conflict (LLC vs Inc, SARL vs SAS) - now computed from the contextual legal extraction of section 3 |
+| record_flags (8) | `t_src`, `t_indic`, `t_alias`, `t_noaddr`, `s_noaddr`, `t_noname`, `t_nlen`, `s_nlen` | source, script, alias, missing fields, lengths |
+| crowding (2) | `s_addr_mult`, `s_street_mult` | how many Source 1 records share this entity's exact address / street (an address match is weaker evidence in a business tower) |
+| stage 2 (13, on top of stage 1 + `p1`) | `c_t_pmax/psum/prank/gap/vs_rest`, `c_s_pmax/psum/prank/n05/n/psum_other/gap`, `c_hn_same_t/s` | stage-1 probabilities of the competing pairs around this pair (the other candidates of the record, the other records of the entity) and house-number consensus among them |
+
+Country is deliberately **not** a feature (open label set: France is unseen); it only partitions retrieval. Multilingual handling is in normalisation (Indic lexicon + unidecode fallback, French tables), not in features, so the model cannot learn country-specific shortcuts that would not transfer.
+
+### 11.2 Ablation (OOF, strict folds, 150/100 boosting rounds, one group removed at a time)
+
+<!-- ABLATION_TABLE -->
+
+## 12. Remaining risks and recommended next experiments
+
+Risks, in the order I would worry about them for the hidden test:
+
+1. **France is unseen and 15 % of the test.** Everything French relies on hand-written tables (`FR_REGIONS`, French street abbreviations, `sarl/sas/eurl`) and on the model's ability to generalise from US/India string statistics. The leave-one-country-out result (section 5) is the only evidence of what an unseen country costs, and it is a lower bound on the damage (India→US and US→India share the Latin script and address conventions more than either shares with France). The public leaderboard, which includes France, is the only French signal you have; use it for *that* question only.
+2. **Namesake chains without addresses are the recall ceiling** (section 8) and the retrieval index is 20x larger on the full data than on the subset, so the full-data retrieval recall@3 is lower than 0.988. Measure it: `blocking_recall.json` is written on every full training run. If recall@5 - recall@3 is material there, raise `--topk` (it is one knob now) and re-tune.
+3. **Decoys that are near-copies of the entity** put a floor on false positives that no threshold removes (`Hashmi ... MD, DDS PC` vs `... MMD, DDS`). If the hidden test generates decoys differently (more or fewer of these), precision moves and the threshold with it; the `singletons_x2` scenario bounds the damage.
+4. **Transductive statistics** (IDF, address crowding, candidate-list context) depend on corpus size and decoy density. They are computed on the test split itself, which is the right thing to do, but their training distribution differs from the test one. The ablation says how much the model leans on them.
+5. **The subset over-states absolute scores.** Every number here is relative. Run the full pipeline once with the new code before submitting and read `validation_report.json` (per fold, per country, cross-fold audit) and `leakage_check.json` for the full data; the runtime profile will tell you where the hours go.
+6. **Stage-2 context is a stacking layer**; it is cross-fitted correctly, but it makes the model depend on the candidate-list structure (top-3 per record), so changing `--topk` requires retraining both stages.
+
+Next experiments, cheapest first:
+
+* Full-data run of `run_pipeline.sh` with the current code; compare its `validation_report.json` with the leaderboard score. If OOF and leaderboard disagree by more than the fold std, the gap is France + decoy density, and the leave-one-country-out number tells you how much of it is France.
+* `blocking.py --topk 5` on the full training split (recall@k is measured anyway) and the ablation on the full data with `--rounds1 150 --rounds2 100`, which the subset shows costs nothing.
+* Better Indic transliteration for retrieval misses: a phonetic key on the unidecode fallback (`phonetic.py` exists and is unused in blocking) as an extra blocking feature family for Indic-script records.
+* A French dry run: normalise `test_source*.tsv` France records and inspect `n_core` / `a_comp` for the 50 most frequent tokens; the tables in `textnorm.py` were written blind.
+* Country-conditional threshold: the per-country OOF thresholds are within 0.05 of each other on the subset, so a single threshold is fine, but France will not have an OOF estimate. Consider the more conservative of the two known thresholds for France.
+* Isotonic vs Platt is a wash here; revisit only if the expected-F decoder (`decode.py`) is switched on, in which case calibration quality is what its guarantee rests on.
+
 
