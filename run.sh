@@ -58,8 +58,10 @@ step() {  # step <name> <command...>
 setup_venv() {
   if [ $NO_VENV -eq 1 ]; then
     # Kaggle / Colab: keep the preinstalled stack, add only what is missing
-    "$PY" -c "import lightgbm, polars, rapidfuzz, scipy, unidecode, pyarrow, pytest" 2>/dev/null \
-      || "$PY" -m pip install -q lightgbm polars pyarrow rapidfuzz scipy unidecode pytest
+    "$PY" -c "import lightgbm, polars, rapidfuzz, scipy, pyarrow, pytest" 2>/dev/null \
+      || "$PY" -m pip install -q lightgbm polars pyarrow rapidfuzz scipy pytest
+    "$PY" -c "import unidecode" 2>/dev/null || "$PY" -m pip install -q unidecode \
+      || echo "WARNING: unidecode not installable (no internet?); using the accent-folding fallback"
   else
     if [ ! -x .venv/bin/python ]; then "$PY" -m venv .venv; fi
     . .venv/bin/activate
@@ -68,7 +70,7 @@ setup_venv() {
     pip install -q -r requirements.txt || pip install -q lightgbm numpy polars pyarrow rapidfuzz scipy unidecode
     pip install -q pytest
   fi
-  python -c "import lightgbm, polars, rapidfuzz, scipy, unidecode, pyarrow; print('python', __import__('sys').version.split()[0], 'polars', polars.__version__, 'lightgbm', lightgbm.__version__)"
+  python -c "import lightgbm, polars, rapidfuzz, scipy, pyarrow; print('python', __import__('sys').version.split()[0], 'polars', polars.__version__, 'lightgbm', lightgbm.__version__)"
   echo "cpus: $(nproc)  mem: $(free -g | awk '/Mem/{print $2}') GB"
 }
 download() {

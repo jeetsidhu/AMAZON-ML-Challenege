@@ -109,8 +109,10 @@ DATA=/kaggle/tmp/dataset WORK=/kaggle/tmp/work OUT=/kaggle/working/output LOGS=/
   bash run.sh --no-venv --skip-download
 ```
 
-`--no-venv` keeps Kaggle's preinstalled LightGBM / polars / rapidfuzz (only `unidecode` is added, which
-needs *Internet on* in the notebook settings, or upload the wheel as a dataset). `/kaggle/tmp` holds the
+`--no-venv` keeps Kaggle's preinstalled LightGBM / polars / rapidfuzz. `unidecode` is installed when the
+notebook has internet; without it the code falls back to accent folding (Indic tokens missing from the
+learned lexicon are then dropped instead of transliterated, a small recall cost on Indian records).
+Without internet, upload a zip of this repository as a dataset and copy it instead of `git clone`. `/kaggle/tmp` holds the
 multi-GB intermediates outside the 20 GB `/kaggle/working` limit; the submission and logs land in
 `/kaggle/working`, which is what the notebook keeps. Use *Save Version -> Save & Run All* for a run that
 survives the browser closing (12 h CPU limit).
