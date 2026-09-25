@@ -45,7 +45,8 @@ step() {  # step <name> <command...>
   if [ $FRESH -eq 0 ] && [ -z "$FROM" ] && [ -f "$WORK/.done/$name" ]; then log "skip  $tag (done earlier; --fresh to redo)"; return; fi
   log "start $tag: $*"
   local t0; t0=$(date +%s)
-  if "$@" > "$LOGS/$tag.log" 2>&1; then
+  # subshell with errexit: a failing command inside a step function fails the step
+  if ( set -e; "$@" ) > "$LOGS/$tag.log" 2>&1; then
     touch "$WORK/.done/$name"
     log "done  $tag in $(( $(date +%s) - t0 ))s"
   else
@@ -64,7 +65,19 @@ setup_venv() {
     "$PY" -c "import unidecode" 2>/dev/null || "$PY" -m pip install -q unidecode \
       || echo "WARNING: unidecode not installable (no internet?); using the accent-folding fallback"
   else
-    if [ ! -x .venv/bin/python ]; then "$PY" -m venv .venv; fi
+    if [ ! -x .venv/bin/python ]; then
+      rm -rf .venv
+      if ! "$PY" -m venv .venv 2>/tmp/venv.err; then
+        cat /tmp/venv.err
+        echo "python venv module unavailable; installing python3-venv (Debian/Ubuntu) ..."
+        rm -rf .venv
+        if command -v apt-get >/dev/null; then
+          PYV=$("$PY" -c 'import sys; print(f"{sys.version_info[0]}.{sys.version_info[1]}")')
+          (apt-get update -qq && apt-get install -y -qq "python${PYV}-venv" python3-venv) >/dev/null 2>&1 || true
+        fi
+        "$PY" -m venv .venv || { echo "still cannot create a venv: run with --no-venv to use the system Python"; exit 1; }
+      fi
+    fi
     set +u; . .venv/bin/activate; set -u   # older activate scripts touch unset variables
     pip install -q --upgrade pip
     # pinned versions target Python 3.14; fall back to the latest compatible releases on older Pythons
@@ -90,7 +103,10 @@ summary() {
 }
 
 step venv setup_venv
-if [ $NO_VENV -eq 0 ]; then set +u; . .venv/bin/activate; set -u; else python() { "$PY" "$@"; }; export -f python 2>/dev/null || true; fi
+if [ $NO_VENV -eq 0 ]; then
+  [ -f .venv/bin/activate ] || { log "ABORTED: .venv was not created (see $LOGS/01_venv.log)"; exit 1; }
+  set +u; . .venv/bin/activate; set -u
+else python() { "$PY" "$@"; }; export -f python 2>/dev/null || true; fi
 if [ $SKIP_DOWNLOAD -eq 0 ]; then step download download; else N=$((N+1)); log "skip  02_download (--skip-download)"; fi
 step tests python -m pytest tests -q
 D="$DATA"; W="$WORK"
