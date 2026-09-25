@@ -53,6 +53,11 @@ python -m pytest tests -q
 
 ## Reproduce end-to-end
 
+On a fresh Linux machine, `bash run.sh` does everything (virtualenv, data download from the challenge
+repository, unit tests, all pipeline steps with one log file each under `logs/`, the validator and a
+summary) and is resumable: re-running it skips the steps that already finished. See the header of
+`run.sh` for `--from <step>`, `--fresh`, `--skip-download` and the `ROUNDS1` / `ROUNDS2` overrides.
+
 `DATA` is the challenge `dataset/` directory, which contains `train/` and `test/`.
 
 ```bash
