@@ -93,6 +93,28 @@ python src/select_threshold.py --data-dir $D --work-dir $W           # --method 
 python src/predict.py        --data-dir $D --work-dir $W --out-dir output
 ```
 
+### Running on Kaggle (CPU notebook, 30 GB RAM)
+
+Attach the challenge data as a dataset, then in one code cell:
+
+```bash
+%%bash
+git clone -q https://github.com/jeetsidhu/AMAZON-ML-Challenege.git /kaggle/working/er
+cd /kaggle/working/er
+# build the expected layout from wherever the attached dataset put the files
+mkdir -p /kaggle/tmp/dataset/train /kaggle/tmp/dataset/test
+for f in train_source1 train_source2 train_source3 train_ground_truth; do ln -sf "$(find /kaggle/input -name $f.tsv | head -1)" /kaggle/tmp/dataset/train/$f.tsv; done
+for f in test_source1 test_source2 test_source3; do ln -sf "$(find /kaggle/input -name $f.tsv | head -1)" /kaggle/tmp/dataset/test/$f.tsv; done
+DATA=/kaggle/tmp/dataset WORK=/kaggle/tmp/work OUT=/kaggle/working/output LOGS=/kaggle/working/logs \
+  bash run.sh --no-venv --skip-download
+```
+
+`--no-venv` keeps Kaggle's preinstalled LightGBM / polars / rapidfuzz (only `unidecode` is added, which
+needs *Internet on* in the notebook settings, or upload the wheel as a dataset). `/kaggle/tmp` holds the
+multi-GB intermediates outside the 20 GB `/kaggle/working` limit; the submission and logs land in
+`/kaggle/working`, which is what the notebook keeps. Use *Save Version -> Save & Run All* for a run that
+survives the browser closing (12 h CPU limit).
+
 ### Fast local experiments
 
 ```bash

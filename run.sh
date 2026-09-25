@@ -5,6 +5,7 @@
 #   bash run.sh --skip-download       # data already in $DATA
 #   bash run.sh --from train          # re-run from a step (steps listed below), keeping earlier outputs
 #   bash run.sh --fresh               # ignore .done markers and redo every step
+#   bash run.sh --no-venv             # use the current Python (Kaggle / Colab: packages preinstalled)
 #
 # Environment overrides (all optional):
 #   DATA=dataset  WORK=work  OUT=output  LOGS=logs  ROUNDS1=150  ROUNDS2=100  PY=python3
@@ -18,10 +19,11 @@ cd "$(dirname "$0")"
 DATA="${DATA:-dataset}"; WORK="${WORK:-work}"; OUT="${OUT:-output}"; LOGS="${LOGS:-logs}"
 ROUNDS1="${ROUNDS1:-150}"; ROUNDS2="${ROUNDS2:-100}"; PY="${PY:-python3}"
 LFS_BASE="https://media.githubusercontent.com/media/SukhvirKooner/ml-challenge-2026/main"
-SKIP_DOWNLOAD=0; FROM=""; FRESH=0
+SKIP_DOWNLOAD=0; FROM=""; FRESH=0; NO_VENV=0
 while [ $# -gt 0 ]; do
   case "$1" in
     --skip-download) SKIP_DOWNLOAD=1 ;;
+    --no-venv) NO_VENV=1 ;;
     --from) FROM="$2"; shift ;;
     --fresh) FRESH=1 ;;
     *) echo "unknown option $1"; exit 2 ;;
@@ -54,12 +56,18 @@ step() {  # step <name> <command...>
 
 # ---------------------------------------------------------------- environment
 setup_venv() {
-  if [ ! -x .venv/bin/python ]; then "$PY" -m venv .venv; fi
-  . .venv/bin/activate
-  pip install -q --upgrade pip
-  # pinned versions target Python 3.14; fall back to the latest compatible releases on older Pythons
-  pip install -q -r requirements.txt || pip install -q lightgbm numpy polars pyarrow rapidfuzz scipy unidecode
-  pip install -q pytest
+  if [ $NO_VENV -eq 1 ]; then
+    # Kaggle / Colab: keep the preinstalled stack, add only what is missing
+    "$PY" -c "import lightgbm, polars, rapidfuzz, scipy, unidecode, pyarrow, pytest" 2>/dev/null \
+      || "$PY" -m pip install -q lightgbm polars pyarrow rapidfuzz scipy unidecode pytest
+  else
+    if [ ! -x .venv/bin/python ]; then "$PY" -m venv .venv; fi
+    . .venv/bin/activate
+    pip install -q --upgrade pip
+    # pinned versions target Python 3.14; fall back to the latest compatible releases on older Pythons
+    pip install -q -r requirements.txt || pip install -q lightgbm numpy polars pyarrow rapidfuzz scipy unidecode
+    pip install -q pytest
+  fi
   python -c "import lightgbm, polars, rapidfuzz, scipy, unidecode, pyarrow; print('python', __import__('sys').version.split()[0], 'polars', polars.__version__, 'lightgbm', lightgbm.__version__)"
   echo "cpus: $(nproc)  mem: $(free -g | awk '/Mem/{print $2}') GB"
 }
@@ -79,7 +87,7 @@ summary() {
 }
 
 step venv setup_venv
-. .venv/bin/activate
+if [ $NO_VENV -eq 0 ]; then . .venv/bin/activate; else python() { "$PY" "$@"; }; export -f python 2>/dev/null || true; fi
 if [ $SKIP_DOWNLOAD -eq 0 ]; then step download download; else N=$((N+1)); log "skip  02_download (--skip-download)"; fi
 step tests python -m pytest tests -q
 D="$DATA"; W="$WORK"
