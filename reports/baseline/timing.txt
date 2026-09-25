@@ -1,0 +1,10 @@
+lexicon rc=0 time=1.422019199s
+prepare_train rc=0 time=16.354146374s
+blocking_train rc=0 time=27.830269681s
+features_train rc=0 time=32.319058405s
+prepare_test rc=0 time=9.798091539s
+blocking_test rc=0 time=11.068643827s
+features_test rc=0 time=11.877059897s
+train rc=0 time=285.224930838s
+threshold rc=0 time=1.156509046s
+predict rc=0 time=12.447330387s

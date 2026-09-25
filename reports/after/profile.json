@@ -1,0 +1,79 @@
+{
+ "folds": {
+  "wall_s": 2.4,
+  "cpu_s": 2.67,
+  "cpu_per_wall": 1.11,
+  "workers": 4,
+  "ok": true
+ },
+ "lexicon": {
+  "wall_s": 1.32,
+  "cpu_s": 1.67,
+  "cpu_per_wall": 1.26,
+  "workers": 4,
+  "ok": true
+ },
+ "prepare_train": {
+  "wall_s": 17.86,
+  "cpu_s": 60.11,
+  "cpu_per_wall": 3.37,
+  "workers": 4,
+  "ok": true
+ },
+ "blocking_train": {
+  "wall_s": 18.24,
+  "cpu_s": 43.71,
+  "cpu_per_wall": 2.4,
+  "workers": 4,
+  "ok": true
+ },
+ "features_train": {
+  "wall_s": 27.17,
+  "cpu_s": 63.62,
+  "cpu_per_wall": 2.34,
+  "workers": 4,
+  "ok": true
+ },
+ "prepare_test": {
+  "wall_s": 10.33,
+  "cpu_s": 29.11,
+  "cpu_per_wall": 2.82,
+  "workers": 4,
+  "ok": true
+ },
+ "blocking_test": {
+  "wall_s": 6.6,
+  "cpu_s": 17.56,
+  "cpu_per_wall": 2.66,
+  "workers": 4,
+  "ok": true
+ },
+ "features_test": {
+  "wall_s": 11.16,
+  "cpu_s": 29.6,
+  "cpu_per_wall": 2.65,
+  "workers": 4,
+  "ok": true
+ },
+ "train": {
+  "wall_s": 265.59,
+  "cpu_s": 950.44,
+  "cpu_per_wall": 3.58,
+  "workers": 4,
+  "ok": true
+ },
+ "leakage_check": {
+  "wall_s": 19.86,
+  "cpu_s": 51.16,
+  "cpu_per_wall": 2.58,
+  "workers": 4,
+  "ok": true
+ },
+ "predict": {
+  "wall_s": 11.37,
+  "cpu_s": 33.79,
+  "cpu_per_wall": 2.97,
+  "workers": 4,
+  "ok": true
+ }
+}
