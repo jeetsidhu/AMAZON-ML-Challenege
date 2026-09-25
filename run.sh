@@ -15,6 +15,7 @@
 #   nohup bash run.sh > logs/run.out 2>&1 &   ;   tail -f logs/run.out
 set -euo pipefail
 cd "$(dirname "$0")"
+trap 'echo "[$(date "+%F %T")] ABORTED at line $LINENO: $BASH_COMMAND (exit $?)" | tee -a "${LOGS:-logs}/run.log"' ERR
 
 DATA="${DATA:-dataset}"; WORK="${WORK:-work}"; OUT="${OUT:-output}"; LOGS="${LOGS:-logs}"
 ROUNDS1="${ROUNDS1:-150}"; ROUNDS2="${ROUNDS2:-100}"; PY="${PY:-python3}"
@@ -64,7 +65,7 @@ setup_venv() {
       || echo "WARNING: unidecode not installable (no internet?); using the accent-folding fallback"
   else
     if [ ! -x .venv/bin/python ]; then "$PY" -m venv .venv; fi
-    . .venv/bin/activate
+    set +u; . .venv/bin/activate; set -u   # older activate scripts touch unset variables
     pip install -q --upgrade pip
     # pinned versions target Python 3.14; fall back to the latest compatible releases on older Pythons
     pip install -q -r requirements.txt || pip install -q lightgbm numpy polars pyarrow rapidfuzz scipy unidecode
@@ -89,7 +90,7 @@ summary() {
 }
 
 step venv setup_venv
-if [ $NO_VENV -eq 0 ]; then . .venv/bin/activate; else python() { "$PY" "$@"; }; export -f python 2>/dev/null || true; fi
+if [ $NO_VENV -eq 0 ]; then set +u; . .venv/bin/activate; set -u; else python() { "$PY" "$@"; }; export -f python 2>/dev/null || true; fi
 if [ $SKIP_DOWNLOAD -eq 0 ]; then step download download; else N=$((N+1)); log "skip  02_download (--skip-download)"; fi
 step tests python -m pytest tests -q
 D="$DATA"; W="$WORK"
