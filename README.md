@@ -53,10 +53,13 @@ python -m pytest tests -q
 
 ## Reproduce end-to-end
 
-On a fresh Linux machine, `bash run.sh` does everything (virtualenv, data download from the challenge
-repository, unit tests, all pipeline steps with one log file each under `logs/`, the validator and a
-summary) and is resumable: re-running it skips the steps that already finished. See the header of
-`run.sh` for `--from <step>`, `--fresh`, `--skip-download` and the `ROUNDS1` / `ROUNDS2` overrides.
+On a fresh Linux machine, `bash run.sh` does everything: a Python 3.12 virtualenv via `uv` (independent of
+the system Python), the data download from the challenge repository, the unit tests, a **smoke test** (the
+whole pipeline on a 0.3 % slice of the real data, scored on a labelled hold-out, ~2 minutes), then every
+pipeline step with one log file each under `logs/`, the validator and a summary. It is resumable:
+re-running it skips the steps that already finished. `bash run.sh --smoke-only` runs just the smoke test.
+See the header of `run.sh` for `--from <step>`, `--fresh`, `--skip-download`, `--skip-smoke`, `--no-venv`
+and the `ROUNDS1` / `ROUNDS2` overrides.
 
 `DATA` is the challenge `dataset/` directory, which contains `train/` and `test/`.
 
