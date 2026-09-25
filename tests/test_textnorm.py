@@ -193,6 +193,6 @@ def test_normalize_record_contract():
 def test_indic_lexicon_applied():
     textnorm.set_lexicon({"name": {textnorm.indic_key("राम"): "ram"}, "addr": {}})
     try:
-        assert core("राम मार्केटिंग", "India").startswith("ram ")
+        assert core("राम मार्केटिंग", "India").split()[0] == "ram"  # second token needs unidecode (optional)
     finally:
         textnorm.set_lexicon({"name": {}, "addr": {}})

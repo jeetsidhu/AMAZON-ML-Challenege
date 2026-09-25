@@ -8,7 +8,14 @@ import re
 import unicodedata
 
 from rapidfuzz import fuzz
-from unidecode import unidecode
+
+try:
+    from unidecode import unidecode
+except ImportError:  # offline Kaggle image without the package: accent folding only
+    def unidecode(s):
+        """Fallback: strip diacritics of Latin text (NFKD). Indic script cannot be transliterated this
+        way; such tokens keep their own script unless the learned lexicon covers them."""
+        return "".join(ch for ch in unicodedata.normalize("NFKD", s) if not unicodedata.combining(ch))
 
 INDIC_RE = re.compile(r"[ऀ-෿]")
 ZW_RE = re.compile(r"[​-‏⁠﻿­]")
