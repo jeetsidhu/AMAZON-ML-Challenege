@@ -489,3 +489,21 @@ Reading: on this subset the per-class thresholds are consistently a little highe
 precision side of the plateau), and on new entities that costs 1-8 x 10^-5 of macro F0.5: the recall
 lost outweighs the precision gained. No configuration clears the fold noise in the nested comparison
 either, so `--select auto` keeps the global policy.
+
+**Alternative per-class objectives and per-class density** (`reports/thresholds/subset05/threshold_experiments_{obj,pc}.*`,
+`configs/threshold_configs.json`):
+
+| configuration | nested macro F0.5 | gain vs global | thresholds |
+|---|---|---|---|
+| noaddr, F0.3 for the address-less class (`fbeta`, beta 0.3) | 0.99023 | -0.00003 | 0.76 / 0.87 |
+| country, max recall s.t. link precision >= 99.9 % (`precision_floor`) | 0.98971 | -0.00054 | India 0.93, US 0.83 |
+| country with per-class decoy ratios (`--density per_class`) | 0.99029 | +0.00003 | India 0.76 (r 2.04), US 0.83 (r 2.01) |
+| country x src with per-class decoy ratios | 0.99026 | +0.00000 | 0.73 / 0.76 / 0.72 / 0.83 |
+
+A precision floor is the wrong objective for this metric: India needs 0.93 to reach 99.9 % link
+precision and loses 0.0015 F0.5 for it (macro F0.5 already trades precision against recall at the
+1.25 : 0.25 weight the challenge specifies; any other objective is a different contest). The more
+precision-first F0.3 on address-less records pushes their threshold to 0.87 without helping.
+Per-class decoy ratios reproduce the global ratio on the subset (2.00 - 2.04: decoys are sampled
+uniformly there) and change no decision; on the real test split they are what would carry a
+class-specific density shift (France, Source 3) into the thresholds.

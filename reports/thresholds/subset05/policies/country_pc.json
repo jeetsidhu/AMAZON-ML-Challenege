@@ -1,0 +1,71 @@
+{
+ "version": 1,
+ "name": "country",
+ "scheme": "per_class",
+ "scale": "calibrated",
+ "class_by": [
+  "country"
+ ],
+ "default": 0.72,
+ "unseen": "default",
+ "thresholds": {
+  "country=India": 0.76,
+  "country=US": 0.83
+ },
+ "fit": {
+  "objective": "macro_f05",
+  "beta": 0.5,
+  "floor": null,
+  "min_support": 200,
+  "passes": 4,
+  "grid": [
+   0.05,
+   0.98,
+   0.01
+  ],
+  "global_threshold": 0.72,
+  "n_entities": 111329,
+  "n_link_rows": 518180,
+  "decoy_weight": "per_row",
+  "support": {
+   "country=India": 44083,
+   "country=US": 65854
+  },
+  "classes_below_min_support": [],
+  "trace": [
+   {
+    "pass": 0,
+    "class": 0,
+    "threshold": 0.76,
+    "objective": 0.9903163890308037
+   },
+   {
+    "pass": 0,
+    "class": 1,
+    "threshold": 0.83,
+    "objective": 0.9903410216159488
+   },
+   {
+    "pass": 1,
+    "class": 0,
+    "threshold": 0.76,
+    "objective": 0.9903410216159488
+   },
+   {
+    "pass": 1,
+    "class": 1,
+    "threshold": 0.83,
+    "objective": 0.9903410216159488
+   }
+  ],
+  "seconds": 7.05,
+  "checkpoint": "ckpt_subset05_r150",
+  "density": "per_class",
+  "decoy_ratio_global": 2.0186122648459817,
+  "decoy_ratios": {
+   "country=India": 2.0365220920694904,
+   "country=US": 2.006759669911322
+  },
+  "global_threshold_train_optimal": 0.72
+ }
+}

@@ -1,0 +1,154 @@
+{
+ "version": 1,
+ "name": "country|src|noaddr",
+ "scheme": "per_class",
+ "scale": "calibrated",
+ "class_by": [
+  "country",
+  "src",
+  "noaddr"
+ ],
+ "default": 0.72,
+ "unseen": "default",
+ "thresholds": {
+  "country=India|src=2|noaddr=0": 0.71,
+  "country=India|src=2|noaddr=1": 0.89,
+  "country=India|src=3|noaddr=0": 0.76,
+  "country=India|src=3|noaddr=1": 0.87,
+  "country=US|src=2|noaddr=0": 0.8,
+  "country=US|src=2|noaddr=1": 0.73,
+  "country=US|src=3|noaddr=0": 0.82,
+  "country=US|src=3|noaddr=1": 0.85
+ },
+ "fit": {
+  "objective": "macro_f05",
+  "beta": 0.5,
+  "floor": null,
+  "min_support": 1000,
+  "passes": 4,
+  "grid": [
+   0.05,
+   0.98,
+   0.01
+  ],
+  "global_threshold": 0.72,
+  "n_entities": 111329,
+  "n_link_rows": 518180,
+  "decoy_weight": 2.0186122648459817,
+  "support": {
+   "country=India|src=2|noaddr=0": 41086,
+   "country=India|src=2|noaddr=1": 2709,
+   "country=India|src=3|noaddr=0": 41288,
+   "country=India|src=3|noaddr=1": 2910,
+   "country=US|src=2|noaddr=0": 61050,
+   "country=US|src=2|noaddr=1": 4931,
+   "country=US|src=3|noaddr=0": 61684,
+   "country=US|src=3|noaddr=1": 5002
+  },
+  "classes_below_min_support": [],
+  "trace": [
+   {
+    "pass": 0,
+    "class": 0,
+    "threshold": 0.71,
+    "objective": 0.990320772194506
+   },
+   {
+    "pass": 0,
+    "class": 1,
+    "threshold": 0.89,
+    "objective": 0.9903301613506901
+   },
+   {
+    "pass": 0,
+    "class": 2,
+    "threshold": 0.76,
+    "objective": 0.9903416266407898
+   },
+   {
+    "pass": 0,
+    "class": 3,
+    "threshold": 0.87,
+    "objective": 0.9903614319228938
+   },
+   {
+    "pass": 0,
+    "class": 4,
+    "threshold": 0.8,
+    "objective": 0.9903687399048103
+   },
+   {
+    "pass": 0,
+    "class": 5,
+    "threshold": 0.73,
+    "objective": 0.9903704183188317
+   },
+   {
+    "pass": 0,
+    "class": 6,
+    "threshold": 0.82,
+    "objective": 0.9903901637991139
+   },
+   {
+    "pass": 0,
+    "class": 7,
+    "threshold": 0.85,
+    "objective": 0.9904013349392079
+   },
+   {
+    "pass": 1,
+    "class": 0,
+    "threshold": 0.71,
+    "objective": 0.9904013349392079
+   },
+   {
+    "pass": 1,
+    "class": 1,
+    "threshold": 0.89,
+    "objective": 0.9904013349392079
+   },
+   {
+    "pass": 1,
+    "class": 2,
+    "threshold": 0.76,
+    "objective": 0.9904013349392079
+   },
+   {
+    "pass": 1,
+    "class": 3,
+    "threshold": 0.87,
+    "objective": 0.9904013349392079
+   },
+   {
+    "pass": 1,
+    "class": 4,
+    "threshold": 0.8,
+    "objective": 0.9904013349392079
+   },
+   {
+    "pass": 1,
+    "class": 5,
+    "threshold": 0.73,
+    "objective": 0.9904013349392079
+   },
+   {
+    "pass": 1,
+    "class": 6,
+    "threshold": 0.82,
+    "objective": 0.9904013349392079
+   },
+   {
+    "pass": 1,
+    "class": 7,
+    "threshold": 0.85,
+    "objective": 0.9904013349392079
+   }
+  ],
+  "seconds": 110.76,
+  "checkpoint": "ckpt_subset05_r150",
+  "density": "global",
+  "decoy_ratio_global": 2.0186122648459817,
+  "decoy_ratios": {},
+  "global_threshold_train_optimal": 0.72
+ }
+}

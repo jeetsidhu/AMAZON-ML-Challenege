@@ -1,0 +1,68 @@
+{
+ "version": 1,
+ "name": "noaddr_f03",
+ "scheme": "per_class",
+ "scale": "calibrated",
+ "class_by": [
+  "noaddr"
+ ],
+ "default": 0.72,
+ "unseen": "default",
+ "thresholds": {
+  "noaddr=0": 0.76,
+  "noaddr=1": 0.87
+ },
+ "fit": {
+  "objective": "fbeta",
+  "beta": 0.5,
+  "floor": null,
+  "min_support": 200,
+  "passes": 4,
+  "grid": [
+   0.05,
+   0.98,
+   0.01
+  ],
+  "global_threshold": 0.72,
+  "n_entities": 111329,
+  "n_link_rows": 518180,
+  "decoy_weight": 2.0186122648459817,
+  "support": {
+   "noaddr=0": 109874,
+   "noaddr=1": 14513
+  },
+  "classes_below_min_support": [],
+  "trace": [
+   {
+    "pass": 0,
+    "class": 0,
+    "threshold": 0.76,
+    "objective": 0.9903195118037277
+   },
+   {
+    "pass": 0,
+    "class": 1,
+    "threshold": 0.87,
+    "objective": 0.9935175292011855
+   },
+   {
+    "pass": 1,
+    "class": 0,
+    "threshold": 0.76,
+    "objective": 0.9903343358402941
+   },
+   {
+    "pass": 1,
+    "class": 1,
+    "threshold": 0.87,
+    "objective": 0.9935175292011855
+   }
+  ],
+  "seconds": 30.09,
+  "checkpoint": "ckpt_subset05_r150",
+  "density": "global",
+  "decoy_ratio_global": 2.0186122648459817,
+  "decoy_ratios": {},
+  "global_threshold_train_optimal": 0.72
+ }
+}

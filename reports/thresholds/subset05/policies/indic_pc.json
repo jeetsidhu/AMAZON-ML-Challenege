@@ -1,0 +1,71 @@
+{
+ "version": 1,
+ "name": "indic",
+ "scheme": "per_class",
+ "scale": "calibrated",
+ "class_by": [
+  "indic"
+ ],
+ "default": 0.72,
+ "unseen": "default",
+ "thresholds": {
+  "indic=0": 0.72,
+  "indic=1": 0.77
+ },
+ "fit": {
+  "objective": "macro_f05",
+  "beta": 0.5,
+  "floor": null,
+  "min_support": 200,
+  "passes": 4,
+  "grid": [
+   0.05,
+   0.98,
+   0.01
+  ],
+  "global_threshold": 0.72,
+  "n_entities": 111329,
+  "n_link_rows": 518180,
+  "decoy_weight": "per_row",
+  "support": {
+   "indic=0": 108623,
+   "indic=1": 16204
+  },
+  "classes_below_min_support": [],
+  "trace": [
+   {
+    "pass": 0,
+    "class": 0,
+    "threshold": 0.72,
+    "objective": 0.9903130289208235
+   },
+   {
+    "pass": 0,
+    "class": 1,
+    "threshold": 0.77,
+    "objective": 0.9903183128336875
+   },
+   {
+    "pass": 1,
+    "class": 0,
+    "threshold": 0.72,
+    "objective": 0.9903183128336875
+   },
+   {
+    "pass": 1,
+    "class": 1,
+    "threshold": 0.77,
+    "objective": 0.9903183128336875
+   }
+  ],
+  "seconds": 9.18,
+  "checkpoint": "ckpt_subset05_r150",
+  "density": "per_class",
+  "decoy_ratio_global": 2.0186122648459817,
+  "decoy_ratios": {
+   "indic=0": 2.025305089279762,
+   "indic=1": 1.9370592044821981
+  },
+  "global_threshold_train_optimal": 0.72
+ }
+}
