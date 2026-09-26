@@ -37,7 +37,6 @@ Output: <work>/<split>/pairs/part_XXXX.parquet (pid, t_rid, s_rid, features..., 
 """
 import multiprocessing as mp
 import os
-import re
 
 import numpy as np
 import polars as pl
@@ -50,8 +49,8 @@ REC_COLS = ["rid", "entity_id", "src", "country", "n_full", "n_core", "n_parts",
             "f_indic", "f_alias", "a_norm", "a_comp", "a_num", "a_hn", "a_street", "a_key"]
 _POOL = None
 # unit / flat / suite / shop numbers inside a normalised address component (textnorm canonical forms)
-UNIT_RE = re.compile(r"\b(?:unit|apt|ste|fl|flat|shop|room|rm|office|door|gala|lot|cabin)\s*(?:no\s*)?([a-z]?\d+[a-z]?)\b")
-PC_RE = re.compile(r"\b\d{5,6}\b")  # postal-like code: 5-6 digit group (US ZIP, Indian PIN, French code postal)
+UNIT_PATTERN = r"\b(?:unit|apt|ste|fl|flat|shop|room|rm|office|door|gala|lot|cabin)\s*(?:no\s*)?[a-z]?\d+[a-z]?\b"
+PC_PATTERN = r"\b\d{5,6}\b"  # postal-like code: 5-6 digit group (US ZIP, Indian PIN, French code postal)
 
 
 def select_candidates(cand, max_rank=None, min_score=None):
@@ -186,25 +185,35 @@ def _tok_unmatched(xs, ys):
     return n
 
 
-def _conflict(xs, ys):
-    """1 when both sides carry values and share none, 0 when both carry values and share one, -1 otherwise."""
-    if not xs or not ys:
-        return -1.0
-    return 0.0 if set(xs) & set(ys) else 1.0
+def _conflict_expr(t, s, name):
+    """1 when both list columns are non-empty and share no element, 0 when both are non-empty and share
+    one, -1 otherwise (vectorised version of the contradiction test)."""
+    both = (t.list.len() > 0) & (s.list.len() > 0)
+    return pl.when(both).then((t.list.set_intersection(s).list.len() == 0).cast(pl.Float32)).otherwise(-1.0).alias(name)
+
+
+def conflict_features(df):
+    """unit_conflict / pc_conflict / num_conflict from the normalised address components, the
+    postal-like digit groups (house number excluded) and all digit groups."""
+    # the number of each match: an optional "no" is skipped first so that "flatno14" gives "14", not "o14"
+    unit = lambda c: pl.col(c).fill_null("").str.extract_all(UNIT_PATTERN).list.eval(pl.element().str.extract(r"(?:no\s*)?([a-z]?\d+[a-z]?)$"))  # noqa: E731
+    pc = lambda c, hn: pl.col(c).fill_null("").str.extract_all(PC_PATTERN).list.set_difference(pl.concat_list(pl.col(hn).fill_null("")))  # noqa: E731
+    num = lambda c: pl.col(c).fill_null("").str.split(" ").list.eval(pl.element().filter(pl.element() != ""))  # noqa: E731
+    return df.select(
+        _conflict_expr(unit("t_a_comp"), unit("s_a_comp"), "unit_conflict"),
+        _conflict_expr(pc("t_a_num", "t_a_hn"), pc("s_a_num", "s_a_hn"), "pc_conflict"),
+        _conflict_expr(num("t_a_num"), num("s_a_num"), "num_conflict"),
+    )
 
 
 def _py_features(args):
-    t_hn, s_hn, t_num, s_num, t_core, s_core, t_comp, s_comp = args
-    out = np.empty((len(t_hn), 12), dtype=np.float32)
+    t_hn, s_hn, t_num, s_num, t_core, s_core = args
+    out = np.empty((len(t_hn), 9), dtype=np.float32)
     for i in range(len(t_hn)):
         a, b = t_hn[i] or "", s_hn[i] or ""
         rel = _hn_relation(a, b)
-        # contradictions: house numbers that are neither equal nor a digit-corruption of each other
+        # contradiction: house numbers that are neither equal nor a digit-corruption of each other
         out[i, 8] = -1 if rel < 0 else (1.0 if rel == 5 else 0.0)
-        out[i, 9] = _conflict(UNIT_RE.findall(t_comp[i] or ""), UNIT_RE.findall(s_comp[i] or ""))
-        pt = [x for x in PC_RE.findall(t_num[i] or "") if x != a]
-        ps = [x for x in PC_RE.findall(s_num[i] or "") if x != b]
-        out[i, 10] = _conflict(pt, ps)
         if rel >= 0:
             x, y = int(a[:9]), int(b[:9])
             d = abs(x - y)
@@ -214,7 +223,6 @@ def _py_features(args):
             out[i, 1] = out[i, 2] = -1
         tn = (t_num[i] or "").split()
         sn = (s_num[i] or "").split()
-        out[i, 11] = _conflict(tn, sn)
         out[i, 0] = rel
         out[i, 3] = (b in tn) if b and tn else -1
         out[i, 4] = (a in sn) if a and sn else -1
@@ -226,12 +234,11 @@ def _py_features(args):
     return out
 
 
-PY_FEATS = ["hn_rel", "hn_logdiff", "hn_reldiff", "hn_s_in_t", "hn_t_in_s", "hn_lendiff", "nm_xt", "nm_xs",
-            "hn_conflict", "unit_conflict", "pc_conflict", "num_conflict"]
+PY_FEATS = ["hn_rel", "hn_logdiff", "hn_reldiff", "hn_s_in_t", "hn_t_in_s", "hn_lendiff", "nm_xt", "nm_xs", "hn_conflict"]
 
 
 def python_features(df, workers=None):
-    cols = [df[c].to_list() for c in ("t_a_hn", "s_a_hn", "t_a_num", "s_a_num", "t_n_core", "s_n_core", "t_a_comp", "s_a_comp")]
+    cols = [df[c].to_list() for c in ("t_a_hn", "s_a_hn", "t_a_num", "s_a_num", "t_n_core", "s_n_core")]
     n = df.height
     step = 50_000
     jobs = [tuple(c[a:a + step] for c in cols) for a in range(0, n, step)]
@@ -254,7 +261,7 @@ def python_features(df, workers=None):
     ).with_columns(
         ((pl.col("lg_t") > 0) & (pl.col("lg_s") > 0) & (pl.col("lg_common") == 0)).cast(pl.Int8).alias("lg_conflict"),
     )
-    return pl.concat([out, lg], how="horizontal")
+    return pl.concat([out, lg, conflict_features(df)], how="horizontal")
 
 
 def name_idf(rec):

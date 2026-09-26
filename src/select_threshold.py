@@ -15,7 +15,9 @@ tuned on the training OOF predictions are compared here, both using record count
 
 Both are computed on the calibrated OOF probabilities (train.py writes p2_cal); the chosen
 threshold (on the calibrated scale) and the full analysis go to <work>/model_meta.json and
-<work>/threshold_analysis.json. --method chooses which one is written as `threshold`.
+<work>/threshold_analysis.json. --method chooses which one is written as `threshold`. The chosen
+threshold (with the decision rule selected by train.py) is the policy predict.py applies: it is
+written to <checkpoint>/thresholds/selected.json and linked as <work>/threshold_policy.json.
 """
 import json
 import os
@@ -115,10 +117,14 @@ def main():
         json.dump(meta, f, indent=1)
     ckpt = Checkpoint.resolve(args.work_dir, None)
     if ckpt is not None and ckpt.exists():
-        # every candidate as a policy file, so tune_thresholds.py / policy_holdout_eval.py can compare them
+        # every candidate as a policy file (predict.py --policy scores any of them without re-running the model)
         for k, v in choice.items():
             ThresholdPolicy(v, name=f"global_{k}", fit={"source": "select_threshold.py", "method": k, "decoy_ratio": r,
                             "oof_macro_f05": analysis["oof_plain_at"][k]["macro_f05"]}, **rule).save(ckpt.path(os.path.join("thresholds", f"global_{k}.json")))
+        ThresholdPolicy(thr, name=f"global_{args.method}", fit={"source": "select_threshold.py", "method": args.method, "decoy_ratio": r,
+                        "oof_macro_f05": analysis["oof_plain_at"][args.method]["macro_f05"]}, **rule).save(ckpt.path(os.path.join("thresholds", "selected.json")))
+        ckpt.set_latest()  # refreshes <work>/threshold_policy.json
+        ckpt.log_experiment({"kind": "select_threshold", "method": args.method, "threshold": thr, "decoy_ratio": r, "candidates": choice})
     log(f"selected threshold {thr} ({args.method})")
 
 

@@ -11,7 +11,7 @@ Layout: <work>/checkpoints/<name>/
     model_meta.json      feature lists, the OOF-optimal global threshold, feature importances
     oof.parquet          OOF predictions of every training pair (p1, p2, p2_cal, folds, label)
     validation_report.json
-    thresholds/          policies fit on this checkpoint by tune_thresholds.py (one JSON each)
+    thresholds/          threshold policies of this checkpoint (train.py, select_threshold.py; selected.json is applied)
     experiments.jsonl    one line per threshold-tuning / hold-out evaluation run on this checkpoint
 
 <work>/checkpoints/LATEST names the most recent checkpoint. The top-level files that older

@@ -16,10 +16,10 @@ ER = "/kaggle/working/er"
 FILES = ["src/common.py", "src/textnorm.py", "src/phonetic.py", "src/metrics.py", "src/folds.py", "src/build_lexicon.py",
          "src/prepare.py", "src/blocking.py", "src/pair_features.py", "src/model.py", "src/thresholds.py", "src/calibrate.py",
          "src/checkpoint.py", "src/threshold_policy.py", "src/train.py", "src/leakage_check.py", "src/select_threshold.py",
-         "src/tune_thresholds.py", "src/decode.py", "src/predict.py", "src/evaluate.py", "src/validate_submission.py",
-         "tools/make_subset.py", "tools/summarize_reports.py", "tools/policy_holdout_eval.py",
+         "src/decode.py", "src/predict.py", "src/evaluate.py", "src/validate_submission.py",
+         "tools/make_subset.py", "tools/summarize_reports.py",
          "tools/error_analysis.py",
-         "tests/test_textnorm.py", "tests/test_calibrate.py", "tests/test_threshold_policy.py", "tests/test_checkpoint.py",
+         "tests/test_textnorm.py", "tests/test_calibrate.py", "tests/test_checkpoint.py",
          "tests/test_decision.py", "tests/test_blocking.py"]
 
 cells = []
@@ -45,7 +45,6 @@ SKIP_SMOKE = False          # True: go straight to the full run
 ROUNDS1, ROUNDS2 = 150, 100 # LightGBM boosting rounds (stage 1 / stage 2); 300 / 200 = original, same score, 2x slower
 DATASET_ROOT = "/kaggle/input"   # searched recursively for train_source1.tsv etc.
 CKPT_NAME = "kaggle_full"        # training checkpoint name (<work>/checkpoints/<name>; re-running resumes it)
-THRESHOLD_ARGS = ["--density", "global", "--select", "auto"]   # tune_thresholds.py: e.g. ["--select", "country"] to force per-country thresholds
 CHANNELS = None                  # blocking.py --channels, e.g. "combined=5,nchar=3,addr=2,rev=2"; None = the default of blocking.py
 
 import os, sys, subprocess, time, json, shutil, glob
@@ -132,7 +131,6 @@ code('''if not SKIP_SMOKE:
     run_step("smoke_06_train", ["src/train.py", "--data-dir", SD, "--work-dir", SW, "--rounds1", "30", "--rounds2", "20", "--checkpoint-name", "smoke"])
     run_step("smoke_07_leakage_check", ["src/leakage_check.py", "--data-dir", SD, "--work-dir", SW, "--canary-rows", "50000", "--canary-rounds", "10"])
     run_step("smoke_08_select_threshold", ["src/select_threshold.py", "--data-dir", SD, "--work-dir", SW])
-    run_step("smoke_08b_tune_thresholds", ["src/tune_thresholds.py", "--data-dir", SD, "--work-dir", SW, "--min-support", "20"])
     run_step("smoke_08c_error_analysis", ["tools/error_analysis.py", "--data-dir", SD, "--work-dir", SW])
     run_step("smoke_09_predict", ["src/predict.py", "--data-dir", SD, "--work-dir", SW, "--out-dir", SO])
     run_step("smoke_10_validate", ["src/validate_submission.py", "--matching", f"{SO}/matching_results.tsv", "--candidate", f"{SO}/candidate_pairs.tsv", "--test-dir", f"{SD}/test"])
@@ -155,8 +153,6 @@ code('''if not SMOKE_ONLY:
                           "--checkpoint-name", CKPT_NAME, "--resume"])
     run_step("07_leakage_check", ["src/leakage_check.py", "--data-dir", DATA, "--work-dir", WORK])
     run_step("08_select_threshold", ["src/select_threshold.py", "--data-dir", DATA, "--work-dir", WORK])
-    # global vs per-class thresholds on the checkpoint's OOF predictions; writes the selected policy (THRESHOLD_ARGS above)
-    run_step("08b_tune_thresholds", ["src/tune_thresholds.py", "--data-dir", DATA, "--work-dir", WORK] + THRESHOLD_ARGS)
     run_step("08c_error_analysis", ["tools/error_analysis.py", "--data-dir", DATA, "--work-dir", WORK])   # entity-level error report -> work/error_analysis.json
     run_step("09_predict", ["src/predict.py", "--data-dir", DATA, "--work-dir", WORK, "--out-dir", OUT])
     run_step("10_validate", ["src/validate_submission.py", "--matching", f"{OUT}/matching_results.tsv", "--candidate", f"{OUT}/candidate_pairs.tsv", "--test-dir", f"{DATA}/test"])''')

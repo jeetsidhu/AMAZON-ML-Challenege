@@ -769,7 +769,7 @@ recoverable retrieval misses (Indic-script names without a lexicon entry; a phon
 unidecode fallback is the obvious candidate), (3) decoy false positives, which are near-copies of the
 entity (section 8) and where the contradiction features did not move the needle.
 
-### 14.6 Runtime
+### 14.6 Runtime (v5.0)
 
 Per training run on the 5 % subset (4 cores): blocking 50 s with the default channels (was 14 s;
 `combined=5` alone 25 s), features ~2x the previous time (5.9 candidates per record instead of 3),
@@ -777,3 +777,24 @@ training 320 s including the ~130 s nested decision-rule search (was 140 s). On 
 candidate set grows from ~30M to ~60M pairs; the training sample stays capped at 5M rows, so training
 time grows with the rule search and the stage-1/2 OOF scoring only. `--channels combined=5` is the
 switch if the full-data blocking budget is tight.
+
+### 14.7 v5.1: global threshold only, bottlenecks removed
+
+* **Per-class thresholds removed.** Section 13 (5 % and 20 % subsets) and the v5.0 runs all ended with
+  `--select auto` keeping the global policy: no per-class configuration beat the global threshold by more
+  than the fold-to-fold noise (best nested gains +0.0001 to +0.0005 on 111k entities, not reproduced on the
+  hold-out). `tune_thresholds.py`, `threshold_policy.py`'s class machinery, `tools/policy_holdout_eval.py`
+  and `configs/threshold_configs.json` are gone; `select_threshold.py` now writes the density-adjusted
+  global threshold straight into the policy file `predict.py` applies. This removes the slowest step
+  after training (~7 min on the 5 % subset, ~36 min on 20 %; it scaled with entities x configurations).
+* **Decision-rule search opt-in** (`train.py --rule-search`). It never selected a rule above the minimum
+  gain and cost ~130 s per training run on the subset (more on the full data); the plain threshold's
+  nested macro F0.5 is still computed (seconds) and reported. The candidate grid is also smaller
+  (5 margins x 3 penalties; the hard veto is out of the default grid after losing by 0.02 everywhere).
+* **Feature step**: the unit-number, postal-code and digit-group conflicts moved out of the per-row
+  Python loop into vectorised polars expressions (identical output on 111k smoke pairs); the loop keeps only the house-number
+  relation, the typo-tolerant token difference and the house-number conflict, i.e. the v4.2 cost.
+  A candidate "optimisation" of the runner-up score (rank filter instead of the per-group sorted list)
+  was measured 5x slower and not adopted.
+* **Prediction**: no class-key computation, one global threshold; `prediction_meta.json` keeps the
+  rejection counts (below threshold / margin / contradiction).

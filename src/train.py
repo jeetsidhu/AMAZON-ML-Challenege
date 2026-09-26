@@ -15,11 +15,13 @@ candidate pair is inside one fold.
   and the acceptance threshold is chosen on the calibrated scale by maximising macro F0.5
   over ALL training Source 1 entities (singletons included). The sweep is vectorised
   (thresholds.py) instead of re-sorting every pair per grid point.
-* Decision rule (thresholds.select_rule): besides the threshold, a margin over the record's
-  runner-up candidate and a threshold penalty for contradicted pairs are considered; the rule is
-  chosen by *nested* macro F0.5 (threshold fit on K-1 folds, scored on the held-out fold) and only
-  kept when it beats the plain threshold by --rule-min-gain. The report also carries the nested
-  macro F0.5 of the final rule, so the headline number is one the thresholds were not tuned on.
+* Decision rule (thresholds.select_rule, --rule-search): besides the threshold, a margin over the
+  record's runner-up candidate and a threshold penalty for contradicted pairs can be considered; the
+  rule is chosen by *nested* macro F0.5 (threshold fit on K-1 folds, scored on the held-out fold) and
+  only kept when it beats the plain threshold by --rule-min-gain. Off by default: on the 5 % subset no
+  rule beat the plain threshold by more than the fold noise and the search cost ~2 min per run. The
+  report always carries the nested macro F0.5 of the plain threshold (a few seconds), so the headline
+  number is one the thresholds were not tuned on.
 * Reporting: macro F0.5, singleton false positives, false positives by kind, per-source
   (Source 2 vs 3) and per-country metrics, and the candidate-generation audit of blocking.py.
 * Per-fold metrics, threshold stability across folds, calibration metrics and the
@@ -31,7 +33,7 @@ candidate pair is inside one fold.
   manifest (arguments, data fingerprint, git commit). `--resume` continues an interrupted run
   from the last saved fold model. The top-level <work>/ files are links to the latest
   checkpoint, so one checkpoint can be evaluated under any number of threshold policies
-  (tune_thresholds.py / predict.py --checkpoint --policy) without retraining.
+  (select_threshold.py / predict.py --checkpoint --policy) without retraining.
 """
 import json
 import os
@@ -122,7 +124,7 @@ def main():
     ap.add_argument("--seed", type=int, default=2026)
     ap.add_argument("--drop-features", default="", help="comma separated feature names to exclude (ablations)")
     ap.add_argument("--no-stage2", action="store_true", help="ablation: use stage-1 probabilities directly")
-    ap.add_argument("--no-rule-search", action="store_true", help="plain threshold only (no margin / contradiction rule search)")
+    ap.add_argument("--rule-search", action="store_true", help="also search margin / contradiction-penalty rules (nested); default: plain threshold")
     ap.add_argument("--rule-min-gain", type=float, default=1e-4, help="nested macro F0.5 gain a margin / contradiction rule needs")
     ap.add_argument("--tag", default="", help="suffix for the report / oof file names (ablations)")
     ap.add_argument("--checkpoint-name", default=None,
@@ -253,9 +255,9 @@ def run(args):
     grid = default_grid()
     links, nt = link_table(meta, p2c, truth, s1_rids, contra)
     # ---------------- decision rule (margin over the runner-up, contradiction penalty): nested selection
-    if args.no_rule_search:
-        rule_sel, rule_rows = dict(NO_RULE, nested_macro_f05=nested_rule_f05(links, nt, s1_fold, grid)[0]), []
-        rule_sel["nested_macro_f05_threshold_only"] = rule_sel["nested_macro_f05"]
+    if not args.rule_search:
+        nested_f, fold_thr = nested_rule_f05(links, nt, s1_fold, grid)
+        rule_sel, rule_rows = dict(NO_RULE, nested_macro_f05=nested_f, nested_macro_f05_threshold_only=nested_f, fold_thresholds=fold_thr), []
     else:
         rule_sel, rule_rows = select_rule(links, nt, s1_fold, grid, min_gain=args.rule_min_gain)
         log("decision rules (nested macro F0.5):", [(r["margin"], r["contra_penalty"], round(r["nested_macro_f05"], 5)) for r in rule_rows])

@@ -1,18 +1,19 @@
 # Business Entity Resolution — Team ICE
 
 Multi-channel blocking + two-stage LightGBM matcher with **many-to-one** assignment (each Source 2/3
-record goes to at most one Source 1 entity, an entity receives any number of records), confidence-based
-rejection (threshold + margin over the runner-up + contradiction rule, selected by nested entity-level
-macro F0.5), leak-free cross-fitted validation, Platt-calibrated probabilities, training checkpoints and
-configurable (global or per-class) acceptance thresholds selected on out-of-fold predictions.
+record goes to at most one Source 1 entity, an entity receives any number of records), one global
+acceptance threshold tuned on out-of-fold entity-level macro F0.5 and adjusted for the test split's decoy
+density (optional confidence-based rejection: margin over the runner-up + contradiction rule, selected by
+nested macro F0.5), leak-free cross-fitted validation, Platt-calibrated probabilities and training checkpoints.
 Only the provided challenge data is used; there are no external lookups, APIs or pretrained
 language models. The only learned model is LightGBM (MIT licence), with far fewer than 8B parameters.
 
 `docs/REPORT.md` holds the diagnosis of the previous version, the leakage audit, the before/after
 metrics, fold-level results, calibration / threshold analysis, the runtime profile, the feature
 ablation, the robustness tests and the list of remaining risks. Section 13 is the per-class
-threshold study; section 14 is the review of the matching logic, validation, candidate generation,
-decision layer and error analysis (what was verified, what was changed, before/after numbers).
+threshold study (negative result; the machinery was removed in v5.1); section 14 is the review of the
+matching logic, validation, candidate generation, decision layer and error analysis (what was verified,
+what was changed, before/after numbers) and 14.7 the v5.1 simplifications.
 
 ## Layout
 
@@ -39,13 +40,12 @@ decision layer and error analysis (what was verified, what was changed, before/a
     ├── pair_features.py       # step 3: ~100 pairwise features (incl. channel ranks, contradictions) -> pairs/part_*.parquet
     ├── model.py               # LightGBM helpers, stage-2 context / competition features, many-to-one assignment + rejection
     ├── thresholds.py          # vectorised macro-F0.5 sweep; thresholds, margin, contradiction penalty; nested rule selection
-    ├── threshold_policy.py    # global / per-class threshold policies: class keys, coordinate-ascent fit, nested comparison, JSON
+    ├── threshold_policy.py    # the policy file: global threshold + decision rule (JSON)
     ├── checkpoint.py          # training checkpoints: manifest, fold models, OOF, calibration, policies, experiment log
     ├── calibrate.py           # Platt / isotonic calibration, prior-shift correction, ECE / Brier
     ├── train.py               # step 4: strict K-fold cross-fitted 2-stage model -> checkpoint (OOF, calibration, report, models)
     ├── leakage_check.py       # step 4a: automated leakage audit of the finished training run
-    ├── select_threshold.py    # step 4b: global test threshold under the expected decoy-density / prior shift
-    ├── tune_thresholds.py     # step 4c: global vs per-class policies on one checkpoint, nested comparison, selection
+    ├── select_threshold.py    # step 4b: global test threshold under the expected decoy-density / prior shift -> threshold_policy.json
     ├── predict.py             # step 5: score test pairs with a checkpoint + policy, write output/*.tsv
     ├── evaluate.py            # score a matching_results.tsv against a ground truth (local hold-outs)
     ├── decode.py              # optional expected-F0.5 decoder
@@ -88,8 +88,7 @@ official validator. Diagnostics land next to the models in `work/`:
 | `work/error_analysis.json` / `.md` | entity-level error analysis under the selected policy: categories ranked by macro F0.5 points lost (`tools/error_analysis.py`) |
 | `work/leakage_check.json` | result of the automated leakage audit (the pipeline stops if it fails) |
 | `work/threshold_analysis.json` | training-optimal vs density-adjusted vs prior-shift global thresholds |
-| `work/threshold_experiments.json` / `.md` | global vs per-class threshold policies: per-class thresholds, per-class metrics before/after, nested (leak-free) comparison, the selected policy |
-| `work/threshold_policy.json` | the selected policy, read by `predict.py` |
+| `work/threshold_policy.json` | the shipped policy (global density-adjusted threshold + decision rule), read by `predict.py` |
 | `work/checkpoints/<name>/` | the training checkpoint: manifest, fold + final models, calibration, OOF predictions, report, `thresholds/*.json`, `experiments.jsonl` (see below) |
 | `work/profile.json` | wall / CPU seconds per stage (cpu/wall shows the parallelism actually achieved) |
 | `work/train/oof.parquet` | out-of-fold stage-1 / stage-2 / calibrated probabilities of every training pair (link to the latest checkpoint) |
@@ -107,8 +106,7 @@ for S in train test; do
 done
 python src/train.py          --data-dir $D --work-dir $W --checkpoint-name run1   # --resume continues an interrupted run; --no-rule-search
 python src/leakage_check.py  --data-dir $D --work-dir $W
-python src/select_threshold.py --data-dir $D --work-dir $W           # --method density|prior|train (global threshold)
-python src/tune_thresholds.py --data-dir $D --work-dir $W            # global vs per-class policies -> threshold_policy.json
+python src/select_threshold.py --data-dir $D --work-dir $W           # --method density|prior|train (global threshold) -> threshold_policy.json
 python tools/error_analysis.py --data-dir $D --work-dir $W           # entity-level error report (OOF, selected policy)
 python src/predict.py        --data-dir $D --work-dir $W --out-dir output   # --checkpoint run1 --policy <file> --reuse-scores
 ```
@@ -146,7 +144,7 @@ same street) or its probability also clears the threshold raised by `contra_pena
 on the held-out fold) and keeps the plain threshold unless a richer rule wins by `--rule-min-gain`; the rule
 is stored in every policy file and applied unchanged by `predict.py`.
 
-### Checkpoints and threshold policies
+### Checkpoints and the threshold policy
 
 `train.py` writes every artefact of a run to `work/checkpoints/<name>/` (default name `ckpt_<timestamp>`):
 the four cross-fitted fold models of each stage as soon as they are trained, the stage-1 OOF
@@ -156,25 +154,13 @@ the OOF-optimal global threshold as a policy file. `--resume` picks an interrupt
 saved fold model (same arguments required; `--overwrite` replaces a checkpoint). `work/checkpoints/LATEST`
 names the newest checkpoint and the top-level `work/` files are links into it, so older tools keep working.
 
-A **threshold policy** (`src/threshold_policy.py`) is a JSON file: one global threshold, or one threshold
-per *class*, where a class is a value of record attributes known at prediction time without labels -
-`country` (of the Source 1 entity), `src` (2/3), `indic` (script), `noaddr`, `alias`, `domain` of the Source 2/3
-record, or any combination (`country,src`). Classes unseen when the policy was fit (France) get the
-policy's `default` threshold (`--unseen max|min|mean` for other choices). `tune_thresholds.py` fits the
-global threshold and every per-class configuration on the checkpoint's OOF predictions (decoy-density
-weighted like `select_threshold.py`; `--density per_class` estimates one ratio per class from record
-counts), reports per-class metrics before and after, and compares the configurations **nested**: thresholds
-refit on K-1 folds, scored on the held-out fold, so the reported gain is on entities the thresholds were
-never tuned on. `--select auto` keeps the global policy unless a per-class one wins by `--min-gain` (1e-4);
-`--select country` forces one. Every policy lands in `<checkpoint>/thresholds/`, the chosen one in
-`work/threshold_policy.json`, and `predict.py --checkpoint <name> --policy <file> --reuse-scores` scores any
-checkpoint under any policy without re-running the model (test scores are cached per checkpoint).
-
-```bash
-python src/tune_thresholds.py --data-dir $D --work-dir $W --class-by country,src      # one configuration
-python src/tune_thresholds.py --data-dir $D --work-dir $W --configs my_configs.json  # [{"name":..,"class_by":[..],"objective":"macro_f05"|"fbeta"|"precision_floor","beta":..,"floor":..,"min_support":..}]
-python src/predict.py --data-dir $D --work-dir $W --out-dir out_country --policy $W/checkpoints/run1/thresholds/country.json --reuse-scores
-```
+A **threshold policy** (`src/threshold_policy.py`) is a JSON file with one global threshold on the calibrated
+probability plus the decision rule (`margin`, `contra_penalty`, both 0 unless `train.py --rule-search` selected
+them). `select_threshold.py` writes the density-adjusted global threshold as `<checkpoint>/thresholds/selected.json`
+and links it as `work/threshold_policy.json`, which `predict.py` applies; `predict.py --checkpoint <name> --policy
+<file> --reuse-scores` scores any checkpoint under any policy file (the `train` / `density` / `prior` candidates are
+all written) without re-running the model. Per-class thresholds (per country / source / script) were studied in
+`docs/REPORT.md` section 13 and never beat the global threshold outside the fold noise; that code path was removed.
 
 ### Running on Kaggle (CPU notebook, 30 GB RAM)
 
@@ -213,7 +199,6 @@ survives the browser closing (12 h CPU limit).
 python tools/make_subset.py --data-dir $D --out-dir subset --frac 0.05      # ~110k S1 entities, 8 min end-to-end on 4 cores
 bash src/run_pipeline.sh subset work_subset out_subset
 python src/evaluate.py --pred out_subset/matching_results.tsv --truth subset/test/subset_ground_truth.tsv --source1 subset/test/test_source1.tsv
-python tools/policy_holdout_eval.py --data-dir subset --work-dir work_subset --out-dir out_subset/policies   # every policy of the checkpoint on the labelled hold-out
 python tools/ablation.py   --data-dir subset --work-dir work_subset
 python tools/robustness.py --data-dir subset --work-dir work_subset
 ```
@@ -242,7 +227,7 @@ using the stage-1 probabilities of the competing candidates. Folds are assigned 
 *name group* (namesakes share a fold; matched Source 2/3 records inherit their entity's fold) and the
 model of fold k never sees a pair touching fold k. Stage-2 OOF probabilities are Platt-calibrated (fit on
 OOF only). Assignment is many-to-one: each Source 2/3 record is linked to its best Source 1 candidate
-when the calibrated probability clears the threshold of its class under the selected policy (a global
-threshold tuned for out-of-fold macro F0.5 and adjusted for the test split's higher decoy density, or
-per-class thresholds when they win the nested comparison), its margin over the runner-up candidate is
-large enough and no strong contradiction vetoes it; the links are then aggregated per Source 1 entity.
+when the calibrated probability clears the global threshold (tuned for out-of-fold macro F0.5 and
+adjusted for the test split's higher decoy density) and, when a decision rule was selected, its margin
+over the runner-up candidate is large enough and no strong contradiction vetoes it; the links are then
+aggregated per Source 1 entity.

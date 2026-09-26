@@ -9,7 +9,7 @@ Source 1 record). Stage-2 training uses out-of-fold stage-1 predictions.
 Assignment (many-to-one, no global one-to-one constraint): each Source 2/3 record belongs to
 at most one Source 1 entity, while a Source 1 entity may receive any number of records. A record
 is linked to its highest-probability candidate only when
-  * that probability clears the threshold of the pair's class (threshold_policy.py),
+  * that probability clears the global threshold (threshold_policy.py),
   * the margin over the record's second-best candidate is at least `margin`, and
   * the pair carries no strong contradiction (contradiction_flag), or its probability also clears
     the threshold raised by `contra_penalty` (penalty >= 1 is a hard veto).
@@ -156,8 +156,8 @@ def assign(meta, p, threshold, margin=0.0, contra_penalty=0.0, contra=None):
     """Many-to-one assignment -> DataFrame (t_rid, s_rid, p): the best Source 1 candidate of every
     Source 2/3 record that passes `accept` (threshold, margin over the runner-up, contradiction rule).
 
-    threshold: a scalar, or one threshold per row of meta (per-class thresholds, threshold_policy.py):
-    the pair is then accepted iff its own probability clears its own threshold.
+    threshold: a scalar, or one threshold per row of meta (the pair is then accepted iff its own
+    probability clears its own threshold).
     contra: optional bool per row of meta (model.contradiction_flag) used by contra_penalty."""
     best = best_candidates(meta, p, contra)
     thr = threshold if np.ndim(threshold) == 0 else np.asarray(threshold, dtype=np.float64)[best["i"].to_numpy()]

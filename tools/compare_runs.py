@@ -25,7 +25,6 @@ def row(name, w):
     ca = rep.get("candidate_audit") or rep.get("blocking_recall") or load(os.path.join(w, "train", "blocking_recall.json")) or {}
     at = rep.get("oof_at_threshold", {})
     dr = rep.get("decision_rule") or {}
-    te = load(os.path.join(w, "threshold_experiments.json")) or {}
     ho = load(os.path.join(w, "holdout_eval.json")) or {}
     hov = ho.get("overall", {})
     recall = ca.get("pair_recall")
@@ -39,7 +38,7 @@ def row(name, w):
         "precision": at.get("micro_precision"), "recall": at.get("micro_recall"),
         "singleton_fp": at.get("singleton_fp"), "fp_decoy": at.get("fp_decoy"), "fp_wrong": at.get("fp_wrong_entity"), "links": at.get("links"),
         "rule": f"m={dr.get('margin', 0):.2f} c={dr.get('contra_penalty', 0):.2f}" if dr else "-",
-        "policy": te.get("selected"), "policy_nested": (te.get("configs", {}).get(te.get("selected", ""), {}).get("nested") or {}).get("nested_macro_f05"),
+        "policy": (load(os.path.join(w, "threshold_policy.json")) or {}).get("name"),
         "holdout_f05": hov.get("macro_f05"), "holdout_precision": hov.get("micro_precision"), "holdout_recall": hov.get("micro_recall"),
         "holdout_singleton_acc": hov.get("singleton_acc"),
         "holdout_by_country": {c: v.get("macro_f05") for c, v in (ho.get("per_country") or {}).items()},

@@ -10,7 +10,7 @@ caused by an unmatched ("decoy") record counts r times, which is what happens wh
 split has r times as many decoys per Source 1 entity as training.
 
 Thresholds and decoy weights may be scalars or arrays aligned with the rows of `links`, which
-is what per-class thresholding (threshold_policy.py) needs: row i is accepted iff p_i >= thr_i.
+keeps the machinery general: row i is accepted iff p_i >= thr_i.
 
 Decision rule beyond the threshold (model.assign applies the same rule at prediction time):
 `margin` requires p_i - p2nd_i >= margin, where p2nd is the probability of the record's runner-up
@@ -188,8 +188,8 @@ def best_f05_threshold(links, nt, grid, decoy_weight=1.0, margin=0.0, contra_pen
     return float(grid[i]), float(f[i])
 
 
-DEFAULT_MARGINS = (0.0, 0.05, 0.1, 0.2, 0.3, 0.5, 0.7)
-DEFAULT_PENALTIES = (0.0, 0.1, 0.2, 1.0)  # 1.0 = hard veto of contradicted pairs
+DEFAULT_MARGINS = (0.0, 0.1, 0.3, 0.5, 0.7)
+DEFAULT_PENALTIES = (0.0, 0.1, 0.3)  # a hard veto (penalty >= 1) lost by 0.02 wherever it was tried; pass it explicitly to re-check
 
 
 def nested_rule_f05(links, nt, s_fold, grid, margin=0.0, contra_penalty=0.0, decoy_weight=1.0):

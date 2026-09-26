@@ -115,3 +115,20 @@ def test_select_rule_prefers_margin_when_it_helps():
     assert rule["margin"] > 0 and rule["gain"] > 0
     base = next(r for r in rows if r["margin"] == 0.0)
     assert rule["nested_macro_f05"] > base["nested_macro_f05"]
+
+
+def test_threshold_policy_round_trip(tmp_path):
+    from threshold_policy import ThresholdPolicy, assign_with_policy
+    pol = ThresholdPolicy(0.76, name="global_density", fit={"method": "density"}, margin=0.1, contra_penalty=0.2)
+    path = tmp_path / "p.json"
+    pol.save(str(path))
+    back = ThresholdPolicy.load(str(path))
+    assert back.default == 0.76 and back.rule == {"margin": 0.1, "contra_penalty": 0.2} and back.name == "global_density"
+    assert "global threshold 0.760" in back.describe()
+    meta, p, contra = _meta()
+    a = assign_with_policy(meta, p, back, contra)
+    b = assign(meta, p, 0.76, margin=0.1, contra_penalty=0.2, contra=contra)
+    assert a.sort("t_rid").rows() == b.sort("t_rid").rows()
+    # older policy files with per-class fields still load as their default threshold
+    legacy = ThresholdPolicy.from_dict({"default": 0.7, "thresholds": {"country=US": 0.6}, "class_by": ["country"]})
+    assert legacy.default == 0.7 and legacy.rule == {"margin": 0.0, "contra_penalty": 0.0}

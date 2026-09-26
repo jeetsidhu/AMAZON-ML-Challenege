@@ -36,7 +36,7 @@ sys.path.insert(0, SRC)
 from checkpoint import Checkpoint  # noqa: E402
 from model import best_candidates  # noqa: E402
 from pair_features import truth_pairs  # noqa: E402
-from threshold_policy import ThresholdPolicy, class_keys, record_columns  # noqa: E402
+from threshold_policy import ThresholdPolicy  # noqa: E402
 
 CATEGORIES = ("singleton_fp", "fp_wrong_entity", "fp_decoy", "blocking_miss", "wrong_top", "below_threshold")
 
@@ -68,8 +68,7 @@ def main():
     args = ap.parse_args()
     d = os.path.join(args.work_dir, "train")
     policy = load_policy(args.work_dir, args.policy)
-    cols = sorted(set(record_columns(policy.class_by)) | {"rid", "entity_id", "src", "country", "business_name", "business_address", "n_core",
-                                                          "f_indic", "f_alias", "n_domain", "a_norm", "group"})
+    cols = ["rid", "entity_id", "src", "country", "business_name", "business_address", "n_core", "f_indic", "f_alias", "n_domain", "a_norm", "group"]
     rec = pl.read_parquet(os.path.join(d, "records.parquet"), columns=cols)
     rec = rec.with_columns(pl.col("rid").cast(pl.UInt32), (pl.col("n_domain").fill_null("") != "").alias("f_domain"),
                            (pl.col("a_norm").fill_null("") == "").alias("f_noaddr"))
@@ -81,8 +80,7 @@ def main():
     contra = oof["contra"].to_numpy() if "contra" in oof.columns else None
     p = oof["p2_cal"].to_numpy()
     best = best_candidates(oof.select("t_rid", "s_rid"), p, contra)
-    keys = class_keys(oof.select("t_rid", "s_rid"), rec, policy.class_by)
-    thr = policy.thresholds_for(keys)[best["i"].to_numpy()]
+    thr = np.full(best.height, policy.default)
     pb, p2 = best["p"].to_numpy().astype(np.float64), best["p2nd"].to_numpy()
     ok_thr = pb >= thr
     ok_margin = (pb - p2) >= policy.margin

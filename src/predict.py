@@ -7,8 +7,8 @@ Every test Source 1 entity gets exactly one row in both files (empty list if not
 Model and decision rule are decoupled:
   --checkpoint  which trained checkpoint to score with (default: <work>/checkpoints/LATEST, falling
                 back to the legacy <work>/stage*.txt files)
-  --policy      threshold policy JSON (threshold_policy.py): global or per-class thresholds.
-                Default: the checkpoint's thresholds/selected.json (written by tune_thresholds.py),
+  --policy      threshold policy JSON (threshold_policy.py): the global threshold + decision rule.
+                Default: the checkpoint's thresholds/selected.json (written by select_threshold.py),
                 else <work>/threshold_policy.json, else the checkpoint's OOF-optimal global threshold.
   --threshold   a plain global threshold, overriding the policy
   --reuse-scores  skip model inference when <work>/test/scores_<checkpoint>.parquet exists (written
@@ -27,7 +27,7 @@ from checkpoint import Checkpoint
 from common import Stage, base_args, left_join_ordered, log, split_dir
 from decode import decode
 from model import CONTRA_COLS, assign, best_candidates, contradiction_flag, house_numbers, iter_parts, part_files, stage2_context, to_np
-from threshold_policy import ThresholdPolicy, class_keys, record_columns
+from threshold_policy import ThresholdPolicy
 
 
 def write_lists(s1_ids, links, id_col, path):
@@ -136,17 +136,11 @@ def run(args):
         meta.with_columns(pl.Series("p1", p1), pl.Series("p2", p2)).write_parquet(os.path.join(d, "test_scores.parquet"))
 
     decoder = args.decoder or meta_json.get("decoder", "threshold")
-    rec = pl.read_parquet(os.path.join(d, "records.parquet"), columns=sorted(set(record_columns(policy.class_by)) | {"rid", "entity_id", "src"}))
-    keys = class_keys(meta, rec, policy.class_by)
-    thr_rows = policy.thresholds_for(keys)
+    rec = pl.read_parquet(os.path.join(d, "records.parquet"), columns=["rid", "entity_id", "src"])
     if decoder == "expected_f":
         links = decode(meta, p2)
     else:
-        links = assign(meta, p2, thr_rows, policy.margin, policy.contra_penalty, contra)
-    seen = set(policy.thresholds)
-    unseen = sorted(set(keys.tolist()) - seen) if policy.thresholds else []
-    if unseen:
-        log(f"classes unseen when the policy was fit -> fallback threshold {policy.fallback():.3f}: {unseen}")
+        links = assign(meta, p2, policy.default, policy.margin, policy.contra_penalty, contra)
     log(f"decoder {decoder}: {links.height} links")
 
     ids = rec.select(pl.col("rid").cast(pl.UInt32), "entity_id")
@@ -165,31 +159,24 @@ def run(args):
     c = write_lists(s1_ids, named(meta), "candidate_entity_ids", os.path.join(args.out_dir, "candidate_pairs.tsv"))
     log(f"wrote {m.height} rows; {(m['matched_entity_ids'] != '').sum()} Source 1 entities matched; "
         f"{(c['candidate_entity_ids'] != '').sum()} with candidates")
-    per_class = {}
     best = best_candidates(meta, p2, contra)
     rejected = {"records_with_candidates": int(best.height), "linked": int(links.height)}
     if decoder != "expected_f":
-        thr_best = thr_rows[best["i"].to_numpy()]
         pb = best["p"].to_numpy()
-        above = pb >= thr_best
+        above = pb >= policy.default
         rejected.update({"below_threshold": int((~above).sum()),
                          "rejected_by_margin": int((above & (pb - best["p2nd"].to_numpy() < policy.margin)).sum()),
                          "rejected_by_contradiction": int((above & (pb - best["p2nd"].to_numpy() >= policy.margin)
-                                                           & best["contra"].to_numpy() & (pb < thr_best + policy.contra_penalty)).sum())
+                                                           & best["contra"].to_numpy() & (pb < policy.default + policy.contra_penalty)).sum())
                          if policy.contra_penalty > 0 else 0})
-        if policy.class_by:
-            kk = pl.DataFrame({"key": keys.astype(str)}).with_row_index("i")
-            agg = best.join(kk, on="i").with_columns(pl.Series("thr", thr_best), pl.Series("ok", above)).group_by("key").agg(
-                pl.len().alias("records"), pl.col("ok").sum().alias("above_threshold"), pl.col("thr").first())
-            per_class = {r["key"]: {"records": int(r["records"]), "above_threshold": int(r["above_threshold"]), "threshold": float(r["thr"])} for r in agg.iter_rows(named=True)}
     log(f"rejection: {rejected}")
     info = {"checkpoint": ckpt_name, "checkpoint_dir": ckpt.dir if ckpt else None, "policy": policy.to_dict(), "decoder": decoder,
             "test_pairs": int(n), "links": int(links.height), "entities_matched": int((m["matched_entity_ids"] != "").sum()),
-            "unseen_classes": unseen, "per_class": per_class, "rejection": rejected, "out_dir": os.path.abspath(args.out_dir)}
+            "rejection": rejected, "out_dir": os.path.abspath(args.out_dir)}
     with open(os.path.join(args.out_dir, "prediction_meta.json"), "w") as f:
         json.dump(info, f, indent=1)
     if ckpt:
-        ckpt.log_experiment({"kind": "predict", "policy": policy.name, "policy_thresholds": policy.thresholds, "default": policy.default,
+        ckpt.log_experiment({"kind": "predict", "policy": policy.name, "threshold": policy.default, "rule": policy.rule,
                              "decoder": decoder, "links": int(links.height), "out_dir": os.path.abspath(args.out_dir)})
     return info
 
