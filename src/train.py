@@ -18,18 +18,30 @@ candidate pair is inside one fold.
 * Per-fold metrics, threshold stability across folds, calibration metrics and the
   cross-fold audit go to <work>/validation_report.json; OOF predictions to
   <work>/train/oof.parquet; final models (refit on all sampled rows) to <work>/stage*.txt.
+* Checkpointing (checkpoint.py): every artefact of the run is written to
+  <work>/checkpoints/<name>/ - each cross-fitted fold model as soon as it is trained, the
+  stage-1 OOF probabilities, the final models, calibration, OOF predictions, report and a
+  manifest (arguments, data fingerprint, git commit). `--resume` continues an interrupted run
+  from the last saved fold model. The top-level <work>/ files are links to the latest
+  checkpoint, so one checkpoint can be evaluated under any number of threshold policies
+  (tune_thresholds.py / predict.py --checkpoint --policy) without retraining.
 """
 import json
 import os
+import shutil
 
 import numpy as np
 import polars as pl
 
 import calibrate
+from checkpoint import Checkpoint, data_fingerprint
 from common import Stage, base_args, left_join_ordered, log, split_dir
 from model import house_numbers, iter_parts, part_files, stage1_features, stage2_context, to_np, train_lgb
 from pair_features import truth_pairs
-from thresholds import best_threshold, default_grid, link_table, metrics_at, sweep
+from threshold_policy import ThresholdPolicy
+from thresholds import best_threshold, default_grid, link_table, metrics_at, subset_links, sweep
+
+TRAIN_ARGS = ("rounds1", "rounds2", "sample_rows", "seed", "drop_features", "no_stage2", "tag")
 
 
 def oof_predict(files, feats_fn, models, eval_fold, n):
@@ -70,12 +82,9 @@ def fold_report(links, nt, s_fold_of_s1, thr, grid):
     rows = []
     for k in np.unique(s_fold_of_s1):
         sel_s = s_fold_of_s1 == k
-        idx_map = -np.ones(len(sel_s), dtype=np.int64)
-        idx_map[sel_s] = np.arange(sel_s.sum())
-        lk = links.filter(pl.Series(sel_s[links["s_idx"].to_numpy()])).with_columns(
-            pl.Series("s_idx", idx_map[links["s_idx"].to_numpy()[sel_s[links["s_idx"].to_numpy()]]]).cast(pl.UInt32))
-        at = metrics_at(lk, nt[sel_s], thr)
-        own = best_threshold(sweep(lk, nt[sel_s], grid))
+        lk, nt_k = subset_links(links, nt, sel_s)
+        at = metrics_at(lk, nt_k, thr)
+        own = best_threshold(sweep(lk, nt_k, grid))
         rows.append({"fold": int(k), "n_entities": int(sel_s.sum()), **{f"{a}_at_global_thr": b for a, b in at.items() if a != "threshold"},
                      "best_threshold": own["threshold"], "macro_f05_at_own_thr": own["macro_f05"]})
     f = np.array([r["macro_f05_at_global_thr"] for r in rows])
@@ -93,13 +102,49 @@ def main():
     ap.add_argument("--drop-features", default="", help="comma separated feature names to exclude (ablations)")
     ap.add_argument("--no-stage2", action="store_true", help="ablation: use stage-1 probabilities directly")
     ap.add_argument("--tag", default="", help="suffix for the report / oof file names (ablations)")
+    ap.add_argument("--checkpoint-name", default=None,
+                    help="name of the checkpoint directory under <work>/checkpoints (default: ckpt_<timestamp>[_<tag>])")
+    ap.add_argument("--resume", action="store_true",
+                    help="reuse the fold models / stage-1 OOF already saved in the checkpoint (same arguments required)")
+    ap.add_argument("--overwrite", action="store_true", help="replace an existing checkpoint of the same name")
     args = ap.parse_args()
     with Stage(args.work_dir, "train" + (f"_{args.tag}" if args.tag else "")):
         run(args)
 
 
+def open_checkpoint(args):
+    """Creates (or, with --resume, reopens) the checkpoint of this run and records its arguments."""
+    name = args.checkpoint_name or (Checkpoint.default_name() + (f"_{args.tag}" if args.tag else ""))
+    ckpt = Checkpoint(args.work_dir, name)
+    train_args = {k: getattr(args, k) for k in TRAIN_ARGS}
+    if ckpt.exists() and args.overwrite and not args.resume:
+        log(f"overwriting checkpoint {ckpt.dir}")
+        shutil.rmtree(ckpt.dir)
+    if ckpt.exists():
+        prev = ckpt.manifest().get("train_args")
+        if not args.resume:
+            raise SystemExit(f"checkpoint {ckpt.dir} exists; --resume continues it, --overwrite replaces it, or choose another --checkpoint-name")
+        if prev != train_args:
+            raise SystemExit(f"cannot resume {ckpt.dir}: it was trained with {prev}, now {train_args}")
+        log(f"resuming checkpoint {ckpt.dir}: stages done {ckpt.manifest().get('stages_done')}")
+    ckpt.update_manifest(train_args=train_args, data_dir=os.path.abspath(args.data_dir), data=data_fingerprint(args.data_dir),
+                         resumed=bool(args.resume and ckpt.exists()))
+    return ckpt
+
+
+def load_or_train(ckpt, fname, resume, fn):
+    """Fold model from the checkpoint when resuming, else trained by fn() and saved immediately."""
+    if resume and ckpt.has(fname):
+        log(f"  {fname}: loaded from checkpoint")
+        return ckpt.load_model(fname)
+    m = fn()
+    ckpt.save_model(m, fname)
+    return m
+
+
 def run(args):
     d = split_dir(args.work_dir, "train")
+    ckpt = open_checkpoint(args)
     files = part_files(d)
     rec = pl.read_parquet(os.path.join(d, "records.parquet"), columns=["rid", "entity_id", "src", "fold", "country"])
     truth = truth_pairs(rec, args.data_dir).drop("label")
@@ -143,9 +188,16 @@ def run(args):
     m1s = {}
     for k in fold_ids:
         m = train_mask(k)
-        m1s[k] = train_lgb(X1[m], ys[m], args.rounds1)
-        log(f"stage-1 fold {k} trained on {int(m.sum())} pairs")
-    p1 = oof_predict(files, lambda df, pid: to_np(df, f1), m1s, s_fold, n)
+        m1s[k] = load_or_train(ckpt, f"stage1_fold{k}.txt", args.resume, lambda: train_lgb(X1[m], ys[m], args.rounds1))
+        log(f"stage-1 fold {k} ready ({int(m.sum())} training pairs)")
+    if args.resume and ckpt.has("oof_stage1.npy") and ckpt.stage_done("stage1"):
+        p1 = np.load(ckpt.path("oof_stage1.npy"))
+        assert len(p1) == n, "checkpointed stage-1 OOF does not match the pair table"
+        log("stage-1 OOF loaded from checkpoint")
+    else:
+        p1 = oof_predict(files, lambda df, pid: to_np(df, f1), m1s, s_fold, n)
+        np.save(ckpt.path("oof_stage1.npy"), p1)
+    ckpt.mark_stage("stage1")
     links1, nt = link_table(meta, p1, truth, s1_rids)
     log("stage-1 OOF", metrics_at(links1, nt, best_threshold(sweep(links1, nt, default_grid()))["threshold"]))
 
@@ -160,9 +212,10 @@ def run(args):
         m2s = {}
         for k in fold_ids:
             m = train_mask(k)
-            m2s[k] = train_lgb(X2[m], ys[m], args.rounds2)
-            log(f"stage-2 fold {k} trained")
+            m2s[k] = load_or_train(ckpt, f"stage2_fold{k}.txt", args.resume, lambda: train_lgb(X2[m], ys[m], args.rounds2))
+            log(f"stage-2 fold {k} ready")
         p2 = oof_predict(files, lambda df, pid: np.hstack([to_np(df, f1), p1[pid, None], C[pid]]), m2s, s_fold, n)
+    ckpt.mark_stage("stage2")
 
     # ---------------- calibration (fit on OOF only) + threshold on the calibrated scale
     cal = calibrate.fit_platt(p2, y_all)
@@ -186,21 +239,12 @@ def run(args):
     audit = {"cross_fold_pair_share": float(cross.mean()), "entities_with_cross_fold_pair": float((~within_s).mean())}
     if within_s.any() and (~within_s).any():
         for name, sel in (("within_fold_only", within_s), ("with_cross_fold_pairs", ~within_s)):
-            idx_map = -np.ones(len(sel), dtype=np.int64)
-            idx_map[sel] = np.arange(sel.sum())
-            keep = sel[links["s_idx"].to_numpy()]
-            lk = links.filter(pl.Series(keep)).with_columns(pl.Series("s_idx", idx_map[links["s_idx"].to_numpy()[keep]]).cast(pl.UInt32))
-            audit[name] = metrics_at(lk, nt[sel], best["threshold"])
+            audit[name] = metrics_at(*subset_links(links, nt, sel), best["threshold"])
     # per-country
     country = s1["country"].fill_null("").to_numpy()
     per_country = {}
     for c in sorted(set(country.tolist())):
-        sel = country == c
-        idx_map = -np.ones(len(sel), dtype=np.int64)
-        idx_map[sel] = np.arange(sel.sum())
-        keep = sel[links["s_idx"].to_numpy()]
-        lk = links.filter(pl.Series(keep)).with_columns(pl.Series("s_idx", idx_map[links["s_idx"].to_numpy()[keep]]).cast(pl.UInt32))
-        per_country[c] = metrics_at(lk, nt[sel], best["threshold"])
+        per_country[c] = metrics_at(*subset_links(links, nt, country == c), best["threshold"])
     # pair-level metrics: why "accuracy" looks great while F0.5 does not
     pred_pos = p2c >= best["threshold"]
     pair = {"accuracy": float((pred_pos == (y_all == 1)).mean()), "positive_rate": float(y_all.mean()),
@@ -212,6 +256,7 @@ def run(args):
         with open(br) as fh:
             blocking_recall = json.load(fh)
     report = {
+        "checkpoint": ckpt.name,
         "n_pairs": int(n), "n_positive_pairs": int(y_all.sum()), "n_s1": int(len(s1_rids)), "folds": fold_ids,
         "stage1_features": len(f1), "dropped_features": sorted(drop), "stage2": not args.no_stage2,
         "threshold": best["threshold"], "oof_at_threshold": best, "threshold_sweep": rows,
@@ -220,27 +265,39 @@ def run(args):
         "blocking_recall": blocking_recall,
     }
     tag = f"_{args.tag}" if args.tag else ""
-    with open(os.path.join(args.work_dir, f"validation_report{tag}.json"), "w") as fh:
+    with open(ckpt.path("validation_report.json"), "w") as fh:
         json.dump(report, fh, indent=1)
     meta.select("pid", "t_rid", "s_rid", "label", "s_fold", "t_fold").with_columns(
-        pl.Series("p1", p1), pl.Series("p2", p2), pl.Series("p2_cal", p2c)).write_parquet(os.path.join(d, f"oof{tag}.parquet"))
+        pl.Series("p1", p1), pl.Series("p2", p2), pl.Series("p2_cal", p2c)).write_parquet(ckpt.path("oof.parquet"))
+    calibrate.save(cal, ckpt.path("calibration.json"))
+    # the OOF-optimal global threshold as a policy file: the baseline every per-class policy is compared with
+    ThresholdPolicy(best["threshold"], name="global_train", fit={"source": "train.py OOF sweep", "objective": "macro_f05",
+                    "oof_macro_f05": best["macro_f05"]}).save(ckpt.path(os.path.join("thresholds", "global_train.json")))
+    ckpt.update_manifest(oof_macro_f05=best["macro_f05"], global_threshold=best["threshold"], n_pairs=int(n), n_s1=int(len(s1_rids)),
+                         folds=fold_ids, calibration=cal, stage2=not args.no_stage2)
+    ckpt.mark_stage("oof")
     if args.tag:
-        return  # ablation run: report only, no final models
+        # ablation run: report + OOF only (no final models); keep the legacy tagged copies at the top level
+        with open(os.path.join(args.work_dir, f"validation_report{tag}.json"), "w") as fh:
+            json.dump(report, fh, indent=1)
+        pl.read_parquet(ckpt.path("oof.parquet")).write_parquet(os.path.join(d, f"oof{tag}.parquet"))
+        log(f"ablation checkpoint {ckpt.dir}")
+        return
 
     # ---------------- final models on the whole sample
-    m1 = train_lgb(X1, ys, args.rounds1)
-    m1.save_model(os.path.join(args.work_dir, "stage1.txt"))
+    m1 = load_or_train(ckpt, "stage1.txt", args.resume, lambda: train_lgb(X1, ys, args.rounds1))
     if not args.no_stage2:
-        m2 = train_lgb(X2, ys, args.rounds2)
-        m2.save_model(os.path.join(args.work_dir, "stage2.txt"))
+        m2 = load_or_train(ckpt, "stage2.txt", args.resume, lambda: train_lgb(X2, ys, args.rounds2))
         imp = sorted(zip(f2, m2.feature_importance("gain")), key=lambda x: -x[1])
     else:
         imp = sorted(zip(f1, m1.feature_importance("gain")), key=lambda x: -x[1])
-    calibrate.save(cal, os.path.join(args.work_dir, "calibration.json"))
-    with open(os.path.join(args.work_dir, "model_meta.json"), "w") as fh:
-        json.dump({"f1": f1, "f2": f2, "stage2": not args.no_stage2, "threshold": best["threshold"],
+    with open(ckpt.path("model_meta.json"), "w") as fh:
+        json.dump({"checkpoint": ckpt.name, "f1": f1, "f2": f2, "stage2": not args.no_stage2, "threshold": best["threshold"],
                    "threshold_scale": "calibrated", "oof_macro_f05": best["macro_f05"],
                    "feature_importance_gain": [(nm, float(g)) for nm, g in imp]}, fh, indent=1)
+    ckpt.mark_stage("final")
+    ckpt.set_latest()
+    log(f"checkpoint {ckpt.dir} complete; <work>/ files now point at it")
     log("top features", [(nm, round(float(g))) for nm, g in imp[:25]])
 
 

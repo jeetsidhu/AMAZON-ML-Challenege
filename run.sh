@@ -11,6 +11,8 @@
 #
 # Environment overrides (all optional):
 #   DATA=dataset  WORK=work  OUT=output  LOGS=logs  ROUNDS1=150  ROUNDS2=100  PY=python3
+#   CKPT=<name>                                    # checkpoint name for train.py (default: timestamped)
+#   THRESHOLD_ARGS="--density per_class --select country"   # extra arguments for tune_thresholds.py
 #   POST_STEP_CMD="bash tools/sync_outputs.sh my-run"   # run after every finished step (e.g. push outputs)
 #
 # Every step writes logs/<nn>_<step>.log, prints its wall time, and leaves $WORK/.done/<step>
@@ -38,7 +40,7 @@ done
 mkdir -p "$LOGS" "$WORK/.done" "$OUT"
 T_START=$(date +%s)
 log() { printf '[%s] %s\n' "$(date '+%F %T')" "$*" | tee -a "$LOGS/run.log"; }
-STEPS=(venv download tests smoke folds lexicon prepare_train blocking_train features_train prepare_test blocking_test features_test train leakage_check select_threshold predict validate summary)
+STEPS=(venv download tests smoke folds lexicon prepare_train blocking_train features_train prepare_test blocking_test features_test train leakage_check select_threshold tune_thresholds predict validate summary)
 N=0
 step() {  # step <name> <command...>
   local name="$1"; shift
@@ -117,10 +119,12 @@ smoke() {
     python src/blocking.py       --data-dir "$SD" --work-dir "$SW" --split $sp
     python src/pair_features.py  --data-dir "$SD" --work-dir "$SW" --split $sp
   done
-  python src/train.py            --data-dir "$SD" --work-dir "$SW" --rounds1 30 --rounds2 20
+  python src/train.py            --data-dir "$SD" --work-dir "$SW" --rounds1 30 --rounds2 20 --checkpoint-name smoke
   python src/leakage_check.py    --data-dir "$SD" --work-dir "$SW" --canary-rows 50000 --canary-rounds 10
   python src/select_threshold.py --data-dir "$SD" --work-dir "$SW"
+  python src/tune_thresholds.py  --data-dir "$SD" --work-dir "$SW" --min-support 20
   python src/predict.py          --data-dir "$SD" --work-dir "$SW" --out-dir "$SO"
+  python tools/policy_holdout_eval.py --data-dir "$SD" --work-dir "$SW" --out-dir "$SO/policies"
   python src/validate_submission.py --matching "$SO/matching_results.tsv" --candidate "$SO/candidate_pairs.tsv" --test-dir "$SD/test"
   python src/evaluate.py --pred "$SO/matching_results.tsv" --truth "$SD/test/subset_ground_truth.tsv" --out "$SW/smoke_eval.json" \
     | python -c "import json,sys; d=json.load(sys.stdin)['overall']; print('SMOKE hold-out macro F0.5 %.4f  precision %.4f  recall %.4f' % (d['macro_f05'], d['micro_precision'], d['micro_recall']))"
@@ -149,10 +153,11 @@ step features_train   python src/pair_features.py    --data-dir "$D" --work-dir 
 step prepare_test     python src/prepare.py          --data-dir "$D" --work-dir "$W" --split test
 step blocking_test    python src/blocking.py         --data-dir "$D" --work-dir "$W" --split test
 step features_test    python src/pair_features.py    --data-dir "$D" --work-dir "$W" --split test
-step train            python src/train.py            --data-dir "$D" --work-dir "$W" --rounds1 "$ROUNDS1" --rounds2 "$ROUNDS2"
+step train            python src/train.py            --data-dir "$D" --work-dir "$W" --rounds1 "$ROUNDS1" --rounds2 "$ROUNDS2" ${CKPT:+--checkpoint-name "$CKPT" --resume}
 step leakage_check    python src/leakage_check.py    --data-dir "$D" --work-dir "$W"
 step select_threshold python src/select_threshold.py --data-dir "$D" --work-dir "$W"
+step tune_thresholds  python src/tune_thresholds.py  --data-dir "$D" --work-dir "$W" ${THRESHOLD_ARGS:-}
 step predict          python src/predict.py          --data-dir "$D" --work-dir "$W" --out-dir "$OUT"
 step validate         python src/validate_submission.py --matching "$OUT/matching_results.tsv" --candidate "$OUT/candidate_pairs.tsv" --test-dir "$D/test"
 step summary          summary
-log "ALL DONE in $(( ($(date +%s) - T_START) / 60 )) min. Submission: $OUT/matching_results.tsv + $OUT/candidate_pairs.tsv; diagnostics: $WORK/summary.md, $WORK/validation_report.json, $WORK/profile.json"
+log "ALL DONE in $(( ($(date +%s) - T_START) / 60 )) min. Submission: $OUT/matching_results.tsv + $OUT/candidate_pairs.tsv; diagnostics: $WORK/summary.md, $WORK/validation_report.json, $WORK/threshold_experiments.md, $WORK/profile.json; checkpoint: $WORK/checkpoints/$(cat "$WORK/checkpoints/LATEST" 2>/dev/null)"

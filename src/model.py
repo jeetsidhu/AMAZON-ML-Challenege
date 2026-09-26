@@ -104,10 +104,14 @@ def to_np(df, cols):
 
 
 def assign(meta, p, threshold):
-    """Best Source 1 per Source 2/3 record if p >= threshold -> DataFrame (t_rid, s_rid, p)."""
-    best = (
-        meta.select("t_rid", "s_rid").with_columns(pl.Series("p", p))
-        .sort("p", descending=True)
-        .unique("t_rid", keep="first")
-    )
-    return best.filter(pl.col("p") >= threshold)
+    """Best Source 1 per Source 2/3 record if p >= threshold -> DataFrame (t_rid, s_rid, p).
+
+    threshold: a scalar, or one threshold per row of meta (per-class thresholds, threshold_policy.py):
+    the pair is then accepted iff its own probability clears its own threshold."""
+    df = meta.select("t_rid", "s_rid").with_columns(pl.Series("p", p))
+    if np.ndim(threshold) == 0:
+        df = df.with_columns(pl.lit(float(threshold)).alias("thr"))
+    else:
+        df = df.with_columns(pl.Series("thr", np.asarray(threshold, dtype=np.float64)))
+    best = df.sort("p", descending=True).unique("t_rid", keep="first")
+    return best.filter(pl.col("p") >= pl.col("thr")).select("t_rid", "s_rid", "p")

@@ -362,3 +362,130 @@ Next experiments, cheapest first:
 * Isotonic vs Platt is a wash here; revisit only if the expected-F decoder (`decode.py`) is switched on, in which case calibration quality is what its guarantee rests on.
 
 
+
+## 13. Per-class thresholds vs the global threshold
+
+Question from the review: the decision rule was a single global threshold on the calibrated
+probability. Would one threshold per class (country, source, script, missing address, ...) be more
+accurate or more robust? This section documents where the global threshold lived, what replaced it,
+how the comparison was kept leak-free, and what the data say.
+
+### 13.1 Where the global threshold was applied
+
+| place | role |
+|---|---|
+| `train.py` | after Platt calibration, one sweep over a 0.01 grid picks the threshold maximising OOF macro F0.5 over all Source 1 entities; written to `model_meta.json["threshold"]` |
+| `select_threshold.py` | re-optimises that single number under the expected decoy-density shift of the test split (`density`), or moves it analytically (`prior`); overwrites `model_meta.json["threshold"]` |
+| `predict.py` -> `model.assign` | every Source 2/3 record is linked to its best candidate iff `p2_cal >= threshold`, the same number for every record, country and source |
+
+Nothing in the pipeline could vary the decision by any property of the record; the only lever was
+the one scalar.
+
+### 13.2 What was built
+
+* `src/threshold_policy.py`: a **threshold policy** is either one global threshold or one threshold per
+  *class*. A class is a value of one or more record attributes known at prediction time without labels:
+  `country` (of the Source 1 entity), `src`, `indic` (script), `noaddr`, `alias`, `domain` (of the Source
+  2/3 record), or any combination. Policies are JSON files (default threshold, per-class thresholds,
+  the attributes used, the fallback rule for unseen classes, and the fit provenance). `model.assign` and
+  `thresholds.metrics_at` accept one threshold per link, so the whole vectorised sweep machinery works
+  per class.
+* **Fitting** (`fit_policy`): the global threshold first, then coordinate ascent - each class's threshold
+  is swept over the grid with the others held fixed, until nothing moves (2-3 passes). The objective is
+  the challenge metric itself (macro F0.5 over *all* entities), because classes defined by the Source
+  2/3 record (source, script) mix inside one entity and their thresholds interact. For classes that
+  partition the entities (country), the ascent is exact in one pass. Per-class objectives are
+  configurable: `fbeta` with a class-specific beta (`configs/threshold_configs.json` uses F0.3 for
+  address-less records) and `precision_floor` (max recall subject to a link-precision floor). Classes
+  below `--min-support` entities keep the global threshold.
+* **Leak-free comparison** (`nested_comparison`): thresholds are only ever fit on out-of-fold
+  predictions of the training split (the test split contributes record *counts* for the decoy-density
+  weight, never labels). Because a per-class fit always beats the global fit on the data it was tuned on,
+  the comparison that decides is nested: for each fold k, both policies are refit on the other folds'
+  entities and applied to fold k; the concatenated held-out decisions give one honest macro F0.5 per
+  policy on identical entities. The labelled local hold-out (a disjoint 2 % / 5 % sample with twice the
+  decoy density, `tools/policy_holdout_eval.py`) is a second check that never touches the fit.
+* **Density adjustment** carries over: `--density global` weights every decoy false link by the global
+  ratio r (as `select_threshold.py`), `--density per_class` estimates one ratio per class from the
+  train/test record counts of that class (on the subsets all classes get r = 2.02 because decoys are
+  sampled uniformly; on the real data France and Source 3 can differ).
+* **Unseen classes**: the test split's France never has an OOF estimate. A per-country policy gives it the
+  policy's default (the global threshold) unless `--unseen max|min|mean` is chosen. The leave-one-country-out
+  results of section 5 argue for the default: the country-specific optimum of an unseen country was 0.12
+  for India-held-out and 0.83 for US-held-out, i.e. the direction is not predictable without labels.
+* **Checkpointing** (`src/checkpoint.py`, `train.py --checkpoint-name/--resume/--overwrite`): every artefact
+  of a training run goes to `work/checkpoints/<name>/` - each fold model as soon as it is trained (a killed
+  run resumes at the last one), the stage-1 OOF probabilities, final models, calibrator, `oof.parquet`,
+  report, manifest (arguments, data fingerprint, git commit), `thresholds/*.json` and `experiments.jsonl`.
+  `tune_thresholds.py --checkpoint` and `predict.py --checkpoint --policy --reuse-scores` evaluate one
+  checkpoint under any number of threshold configurations without retraining or re-scoring.
+* **Pipeline**: `run_pipeline.sh` / `run.sh` / the Kaggle notebook run `tune_thresholds.py` after
+  `select_threshold.py`; `predict.py` reads `work/threshold_policy.json` (the selected policy) by
+  default, so a run with the default arguments behaves exactly as before unless a per-class policy wins.
+
+### 13.3 Results, 5 % subset (111k Source 1 entities, checkpoint `ckpt_subset05_r150`, 150/100 rounds)
+
+Raw outputs: `reports/thresholds/subset05/` (threshold_experiments.{json,md}, holdout_policy_eval.{json,md},
+every policy file, checkpoint manifest). Global threshold: 0.72 on the calibrated scale (train-optimal and
+density-adjusted coincide; the prior-shift variant is 0.78).
+
+**Selected thresholds per class** (fit on all OOF predictions, decoy weight r = 2.02):
+
+| policy | thresholds |
+|---|---|
+| global | 0.72 |
+| country | India 0.76, US 0.83 |
+| src | S2 0.72, S3 0.76 |
+| country x src | India/S2 0.73, India/S3 0.76, US/S2 0.83, US/S3 0.83 |
+| indic | Latin 0.72, Indic script 0.77 |
+| noaddr | with address 0.76, no address 0.83 |
+| country x src x indic | 0.73 - 0.83 (6 classes) |
+| country x src x noaddr | 0.71 - 0.89 (8 classes; address-less classes 0.73 - 0.89) |
+
+**Before vs after, out-of-fold.** "In-sample" is the fit set (per-class always >= global by construction);
+"nested" is the leak-free number that decides. Fold-to-fold std of macro F0.5 is 0.0002.
+
+| policy | classes | nested macro F0.5 | gain vs global | folds better | in-sample macro F0.5 | precision | recall | singleton acc |
+|---|---|---|---|---|---|---|---|---|
+| global | 0 | 0.99026 | - | - | 0.99031 | 0.99818 | 0.97644 | 0.9941 |
+| country | 2 | 0.99029 | +0.00003 | 3/4 | 0.99034 | 0.99859 | 0.97527 | 0.9956 |
+| src | 2 | 0.99025 | -0.00001 | 2/4 | 0.99035 | 0.99831 | 0.97610 | 0.9945 |
+| country x src | 4 | 0.99026 | +0.00001 | 2/4 | 0.99037 | 0.99858 | 0.97536 | 0.9956 |
+| indic | 2 | 0.99024 | -0.00002 | 1/4 | 0.99032 | 0.99819 | 0.97640 | 0.9941 |
+| noaddr | 2 | 0.99024 | -0.00002 | 1/4 | 0.99034 | 0.99851 | 0.97554 | 0.9951 |
+| country x src x indic | 6 | 0.99025 | -0.00000 | 2/4 | 0.99038 | 0.99863 | 0.97522 | 0.9957 |
+| country x src x noaddr | 8 | 0.99019 | -0.00006 | 0/4 | 0.99040 | 0.99857 | 0.97538 | 0.9953 |
+
+**Per-class metrics, country x src** (OOF, at the global threshold vs at the class threshold):
+
+| class | entities | thr global -> class | F0.5 global -> class | precision | recall |
+|---|---|---|---|---|---|
+| India / S2 | 41442 | 0.72 -> 0.73 | 0.98958 -> 0.98966 | 0.99793 -> 0.99800 | 0.97731 -> 0.97722 |
+| India / S3 | 41626 | 0.72 -> 0.76 | 0.98965 -> 0.98975 | 0.99749 -> 0.99788 | 0.96946 -> 0.96871 |
+| US / S2 | 61726 | 0.72 -> 0.83 | 0.99197 -> 0.99201 | 0.99856 -> 0.99907 | 0.97829 -> 0.97670 |
+| US / S3 | 62248 | 0.72 -> 0.83 | 0.99191 -> 0.99196 | 0.99843 -> 0.99894 | 0.97970 -> 0.97828 |
+
+Every class moves *up* from 0.72, buying 0.0004-0.0005 precision for 0.001-0.0016 recall, and gains
+0.00004-0.00011 F0.5 in-sample - a tenth of the fold noise. The largest in-sample per-class gain in any
+configuration is +0.0011 (India / S3 / no address, 2910 entities, threshold 0.87), exactly the kind of
+small class whose nested result (0/4 folds better for the 8-class policy) shows the gain does not
+transfer.
+
+**Hold-out (44k entities, 2x decoy density, never used for fitting), full pipeline per policy:**
+
+| policy | macro F0.5 | delta vs global | precision | recall | singleton acc | F0.5 India | F0.5 US |
+|---|---|---|---|---|---|---|---|
+| global (0.72) | 0.99195 | - | 0.99879 | 0.97872 | 0.9967 | 0.99155 | 0.99222 |
+| country | 0.99191 | -0.00004 | 0.99912 | 0.97773 | 0.9972 | 0.99147 | 0.99221 |
+| src | 0.99193 | -0.00002 | 0.99891 | 0.97842 | 0.9967 | 0.99149 | 0.99222 |
+| country x src | 0.99192 | -0.00003 | 0.99910 | 0.97784 | 0.9972 | 0.99148 | 0.99221 |
+| indic | 0.99194 | -0.00001 | 0.99879 | 0.97867 | 0.9967 | 0.99152 | 0.99222 |
+| noaddr | 0.99190 | -0.00005 | 0.99907 | 0.97791 | 0.9967 | 0.99139 | 0.99224 |
+| country x src x indic | 0.99189 | -0.00006 | 0.99913 | 0.97766 | 0.9972 | 0.99140 | 0.99221 |
+| country x src x noaddr | 0.99187 | -0.00008 | 0.99909 | 0.97778 | 0.9972 | 0.99135 | 0.99221 |
+
+Reading: on this subset the per-class thresholds are consistently a little higher than the global one
+(the classes' F0.5 curves are flat between 0.7 and 0.85, and the coordinate ascent lands on the
+precision side of the plateau), and on new entities that costs 1-8 x 10^-5 of macro F0.5: the recall
+lost outweighs the precision gained. No configuration clears the fold noise in the nested comparison
+either, so `--select auto` keeps the global policy.

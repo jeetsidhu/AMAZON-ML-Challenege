@@ -89,6 +89,41 @@ def main():
         for k, v in ta["candidates"].items():
             a, b = ta["oof_plain_at"][k], ta["oof_density_adjusted_at"][k]
             print(f"| {k} | {v:.3f} | {fmt(a['macro_f05'])} | {fmt(b['macro_f05'])} | {fmt(b['micro_precision'])} | {fmt(b['micro_recall'])} |")
+    te = load(os.path.join(w, "threshold_experiments.json"))
+    if te:
+        print("\n## Threshold policies: global vs per-class (tune_thresholds.py)\n")
+        print(f"checkpoint `{te['checkpoint']}`; decoy ratio r = {te['decoy_ratio_global']:.3f} ({te['density']}); "
+              f"global threshold {te['global_threshold_density_adjusted']:.2f} (train-optimal {te['global_threshold_train_optimal']:.2f}); "
+              f"**selected: {te['selected']}** ({te['selection_rule']})\n")
+        print("| config | classes | nested macro F0.5 | gain vs global | folds better | in-sample macro F0.5 | precision | recall | thresholds |\n|---|---|---|---|---|---|---|---|---|")
+        for name, r in te["configs"].items():
+            n, o = r["nested"], r["in_sample"]["overall"]
+            thr = ", ".join(f"{k}={v:.2f}" for k, v in r["policy"]["thresholds"].items()) or f"{r['policy']['default']:.2f}"
+            print(f"| {name} | {r['n_classes']} | {fmt(n['nested_macro_f05'])} | {n['gain_vs_global']:+.5f} | {n['folds_better_than_global']}/{len(n['per_fold'])} | "
+                  f"{fmt(o['macro_f05'])} | {fmt(o['micro_precision'])} | {fmt(o['micro_recall'])} | {thr} |")
+    he = load(os.path.join(w, "holdout_policy_eval.json"))
+    if he:
+        print("\n## Threshold policies on the labelled hold-out (tools/policy_holdout_eval.py)\n")
+        base = he["policies"][he["baseline"]]["overall"]["macro_f05"]
+        print("| policy | classes | macro F0.5 | delta vs global | precision | recall | singleton acc | links |\n|---|---|---|---|---|---|---|---|")
+        for name, r in he["policies"].items():
+            o = r["overall"]
+            print(f"| {name} | {len(r['policy']['thresholds'])} | {fmt(o['macro_f05'])} | {o['macro_f05'] - base:+.5f} | {fmt(o['micro_precision'])} | "
+                  f"{fmt(o['micro_recall'])} | {fmt(o['singleton_acc'], 4)} | {r['links']} |")
+    ck_root = os.path.join(w, "checkpoints")
+    if os.path.isdir(ck_root):
+        print("\n## Checkpoints\n")
+        latest = open(os.path.join(ck_root, "LATEST")).read().strip() if os.path.exists(os.path.join(ck_root, "LATEST")) else None
+        print("| checkpoint | created | git | stages | rounds | OOF macro F0.5 | global thr | policies |\n|---|---|---|---|---|---|---|---|")
+        for name in sorted(os.listdir(ck_root)):
+            m = load(os.path.join(ck_root, name, "manifest.json"))
+            if not m:
+                continue
+            ta = m.get("train_args") or {}
+            pols = sorted(f[:-5] for f in os.listdir(os.path.join(ck_root, name, "thresholds"))) if os.path.isdir(os.path.join(ck_root, name, "thresholds")) else []
+            print(f"| {name}{' (LATEST)' if name == latest else ''} | {m.get('created')} | {m.get('git_commit')} | {','.join(m.get('stages_done', []))} | "
+                  f"{ta.get('rounds1')}/{ta.get('rounds2')} | {fmt(m.get('oof_macro_f05')) if m.get('oof_macro_f05') is not None else '-'} | "
+                  f"{m.get('global_threshold', '-')} | {', '.join(pols)} |")
     prof = load(os.path.join(w, "profile.json"))
     if prof:
         print("\n## Runtime profile\n")

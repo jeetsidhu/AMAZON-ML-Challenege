@@ -1,0 +1,15 @@
+{
+ "version": 1,
+ "name": "global_train",
+ "scheme": "global",
+ "scale": "calibrated",
+ "class_by": [],
+ "default": 0.72,
+ "unseen": "default",
+ "thresholds": {},
+ "fit": {
+  "source": "train.py OOF sweep",
+  "objective": "macro_f05",
+  "oof_macro_f05": 0.9908747496582192
+ }
+}

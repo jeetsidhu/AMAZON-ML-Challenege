@@ -24,9 +24,34 @@ import numpy as np
 import polars as pl
 
 import calibrate
+from checkpoint import Checkpoint
 from common import base_args, log, split_dir
 from pair_features import truth_pairs
+from threshold_policy import ThresholdPolicy
 from thresholds import best_threshold, default_grid, link_table, metrics_at, sweep
+
+
+def decoy_ratio(src_tr, src_te, n_true):
+    """Decoy-density ratio test/train from record counts per source ([n_s1, n_s2, n_s3] per split)
+    and the number of true training pairs. Returns (m, decoys_per_s1_train, decoys_per_s1_test, r)."""
+    m = n_true / src_tr[0]
+    dec_tr = (src_tr[1] + src_tr[2]) / src_tr[0] - m
+    dec_te = (src_te[1] + src_te[2]) / src_te[0] - m
+    r = max(1.0, dec_te / dec_tr) if dec_tr > 0 else 1.0
+    return m, dec_tr, dec_te, r
+
+
+def source_counts(work_dir):
+    """[n_s1, n_s2, n_s3] of the train and test split, from records.parquet."""
+    out = []
+    for split in ("train", "test"):
+        path = os.path.join(split_dir(work_dir, split), "records.parquet")
+        if not os.path.exists(path):
+            out.append(None)
+            continue
+        vc = pl.read_parquet(path, columns=["src"])["src"].value_counts().sort("src")
+        out.append(vc["count"].to_list())
+    return out
 
 
 def main():
@@ -34,15 +59,12 @@ def main():
     ap.add_argument("--ratio", type=float, default=None, help="override the estimated decoy-density ratio")
     ap.add_argument("--method", choices=["density", "prior", "train"], default="density")
     args = ap.parse_args()
-    dtr, dte = split_dir(args.work_dir, "train"), split_dir(args.work_dir, "test")
+    dtr = split_dir(args.work_dir, "train")
     rec = pl.read_parquet(os.path.join(dtr, "records.parquet"), columns=["rid", "entity_id", "src"])
     truth = truth_pairs(rec, args.data_dir).drop("label")
-    src_tr = rec["src"].value_counts().sort("src")["count"].to_list()
-    src_te = pl.read_parquet(os.path.join(dte, "records.parquet"), columns=["src"])["src"].value_counts().sort("src")["count"].to_list()
-    m = truth.height / src_tr[0]
-    dec_tr = (src_tr[1] + src_tr[2]) / src_tr[0] - m
-    dec_te = (src_te[1] + src_te[2]) / src_te[0] - m
-    r = args.ratio if args.ratio is not None else max(1.0, dec_te / dec_tr)
+    src_tr, src_te = source_counts(args.work_dir)
+    m, dec_tr, dec_te, r = decoy_ratio(src_tr, src_te, truth.height)
+    r = args.ratio if args.ratio is not None else r
     log(f"true matches/S1 (train) {m:.3f}; decoys/S1 train {dec_tr:.3f} test {dec_te:.3f}; ratio r={r:.3f}")
 
     oof = pl.read_parquet(os.path.join(dtr, "oof.parquet"), columns=["t_rid", "s_rid", "label", "p2_cal"])
@@ -88,6 +110,12 @@ def main():
                  "adjusted_macro_f05_at_threshold": analysis["oof_density_adjusted_at"][args.method]["macro_f05"]})
     with open(meta_path, "w") as f:
         json.dump(meta, f, indent=1)
+    ckpt = Checkpoint.resolve(args.work_dir, None)
+    if ckpt is not None and ckpt.exists():
+        # every candidate as a policy file, so tune_thresholds.py / policy_holdout_eval.py can compare them
+        for k, v in choice.items():
+            ThresholdPolicy(v, name=f"global_{k}", fit={"source": "select_threshold.py", "method": k, "decoy_ratio": r,
+                            "oof_macro_f05": analysis["oof_plain_at"][k]["macro_f05"]}).save(ckpt.path(os.path.join("thresholds", f"global_{k}.json")))
     log(f"selected threshold {thr} ({args.method})")
 
 

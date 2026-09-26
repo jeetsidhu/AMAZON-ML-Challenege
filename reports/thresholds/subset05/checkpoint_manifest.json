@@ -1,0 +1,93 @@
+{
+ "name": "ckpt_subset05_r150",
+ "created": "2026-09-26T07:59:11",
+ "git_commit": "b13d0d9+dirty",
+ "stages_done": [
+  "stage1",
+  "stage2",
+  "oof",
+  "final"
+ ],
+ "train_args": {
+  "rounds1": 150,
+  "rounds2": 100,
+  "sample_rows": 5000000,
+  "seed": 2026,
+  "drop_features": "",
+  "no_stage2": false,
+  "tag": ""
+ },
+ "data_dir": "/tmp/claude-0/-home-user-AMAZON-ML-Challenege/6563b5fb-eb95-5cab-946b-63b001dfde86/scratchpad/exp/subset05",
+ "data": {
+  "train/train_ground_truth.tsv": {
+   "bytes": 6403167,
+   "mtime": 1790409090
+  },
+  "train/train_source1.tsv": {
+   "bytes": 10608605,
+   "mtime": 1790409090
+  },
+  "train/train_source2.tsv": {
+   "bytes": 24656179,
+   "mtime": 1790409090
+  },
+  "train/train_source3.tsv": {
+   "bytes": 25300025,
+   "mtime": 1790409090
+  },
+  "test/subset_ground_truth.tsv": {
+   "bytes": 2535142,
+   "mtime": 1790409093
+  },
+  "test/test_source1.tsv": {
+   "bytes": 4199019,
+   "mtime": 1790409093
+  },
+  "test/test_source2.tsv": {
+   "bytes": 12547279,
+   "mtime": 1790409093
+  },
+  "test/test_source3.tsv": {
+   "bytes": 12743571,
+   "mtime": 1790409093
+  }
+ },
+ "resumed": false,
+ "updated": "2026-09-26T08:01:41",
+ "files": {
+  "calibration.json": 148,
+  "manifest.json": 1890,
+  "model_meta.json": 7110,
+  "oof.parquet": 22288244,
+  "oof_stage1.npy": 6177104,
+  "stage1.txt": 2091444,
+  "stage1_fold0.txt": 2088247,
+  "stage1_fold1.txt": 2088016,
+  "stage1_fold2.txt": 2087074,
+  "stage1_fold3.txt": 2087071,
+  "stage2.txt": 1258994,
+  "stage2_fold0.txt": 1143562,
+  "stage2_fold1.txt": 1139452,
+  "stage2_fold2.txt": 1130715,
+  "stage2_fold3.txt": 1136458,
+  "validation_report.json": 33662
+ },
+ "oof_macro_f05": 0.9908747496582192,
+ "global_threshold": 0.72,
+ "n_pairs": 1544244,
+ "n_s1": 111329,
+ "folds": [
+  0,
+  1,
+  2,
+  3
+ ],
+ "calibration": {
+  "method": "platt",
+  "a": 0.9513230997115601,
+  "b": -0.06838772714275718,
+  "log_loss": 0.007959077152549489,
+  "identity_log_loss": 0.007977275643052336
+ },
+ "stage2": true
+}

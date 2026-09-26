@@ -1,0 +1,1263 @@
+{
+ "checkpoint": "ckpt_subset05_r150",
+ "truth": "/tmp/claude-0/-home-user-AMAZON-ML-Challenege/6563b5fb-eb95-5cab-946b-63b001dfde86/scratchpad/exp/subset05/test/subset_ground_truth.tsv",
+ "baseline": "global_train",
+ "policies": {
+  "country": {
+   "policy_path": "/tmp/claude-0/-home-user-AMAZON-ML-Challenege/6563b5fb-eb95-5cab-946b-63b001dfde86/scratchpad/exp/work05/checkpoints/ckpt_subset05_r150/thresholds/country.json",
+   "policy": {
+    "version": 1,
+    "name": "country",
+    "scheme": "per_class",
+    "scale": "calibrated",
+    "class_by": [
+     "country"
+    ],
+    "default": 0.72,
+    "unseen": "default",
+    "thresholds": {
+     "country=India": 0.76,
+     "country=US": 0.83
+    },
+    "fit": {
+     "objective": "macro_f05",
+     "beta": 0.5,
+     "floor": null,
+     "min_support": 200,
+     "passes": 4,
+     "grid": [
+      0.05,
+      0.98,
+      0.01
+     ],
+     "global_threshold": 0.72,
+     "n_entities": 111329,
+     "n_link_rows": 518180,
+     "decoy_weight": 2.0186122648459817,
+     "support": {
+      "country=India": 44083,
+      "country=US": 65854
+     },
+     "classes_below_min_support": [],
+     "trace": [
+      {
+       "pass": 0,
+       "class": 0,
+       "threshold": 0.76,
+       "objective": 0.9903172650104781
+      },
+      {
+       "pass": 0,
+       "class": 1,
+       "threshold": 0.83,
+       "objective": 0.9903425601719003
+      },
+      {
+       "pass": 1,
+       "class": 0,
+       "threshold": 0.76,
+       "objective": 0.9903425601719003
+      },
+      {
+       "pass": 1,
+       "class": 1,
+       "threshold": 0.83,
+       "objective": 0.9903425601719003
+      }
+     ],
+     "seconds": 7.18,
+     "checkpoint": "ckpt_subset05_r150",
+     "density": "global",
+     "decoy_ratio_global": 2.0186122648459817,
+     "decoy_ratios": {},
+     "global_threshold_train_optimal": 0.72
+    }
+   },
+   "links": 149102,
+   "unseen_classes": [],
+   "per_class_links": {
+    "country=India": {
+     "records": 103194,
+     "links": 59181,
+     "threshold": 0.76
+    },
+    "country=US": {
+     "records": 155859,
+     "links": 89921,
+     "threshold": 0.83
+    }
+   },
+   "overall": {
+    "n_entities": 44144,
+    "macro_f05": 0.9919139641871438,
+    "macro_f05_non_singletons": 0.9916046932894462,
+    "singleton_share": 0.05572671257702066,
+    "singleton_acc": 0.9971544715447155,
+    "micro_precision": 0.9991214068221754,
+    "micro_recall": 0.9777309600693077,
+    "mean_entity_precision": 0.9971462443052262,
+    "mean_entity_recall": 0.9774747800153233,
+    "entities_perfect": 0.9264905762957594,
+    "entities_zero": 0.0021293947082276186
+   },
+   "per_country": {
+    "India": {
+     "n_entities": 17562,
+     "macro_f05": 0.9914672914357978,
+     "macro_f05_non_singletons": 0.9909422492864773,
+     "singleton_share": 0.05796606309076415,
+     "singleton_acc": 1.0,
+     "micro_precision": 0.9989185718389348,
+     "micro_recall": 0.9762529931467261,
+     "mean_entity_precision": 0.9968088704292161,
+     "mean_entity_recall": 0.9761495079979123,
+     "entities_perfect": 0.9225600728846373,
+     "entities_zero": 0.0020498804236419544
+    },
+    "US": {
+     "n_entities": 26582,
+     "macro_f05": 0.9922090686510345,
+     "macro_f05_non_singletons": 0.9920406309817742,
+     "singleton_share": 0.05424723497103303,
+     "singleton_acc": 0.9951456310679612,
+     "micro_precision": 0.9992549015246717,
+     "micro_recall": 0.9787057913712164,
+     "mean_entity_precision": 0.9973682615448726,
+     "mean_entity_recall": 0.9783469081082445,
+     "entities_perfect": 0.9290873523436912,
+     "entities_zero": 0.0021819276201941163
+    }
+   }
+  },
+  "country_src": {
+   "policy_path": "/tmp/claude-0/-home-user-AMAZON-ML-Challenege/6563b5fb-eb95-5cab-946b-63b001dfde86/scratchpad/exp/work05/checkpoints/ckpt_subset05_r150/thresholds/country_src.json",
+   "policy": {
+    "version": 1,
+    "name": "country|src",
+    "scheme": "per_class",
+    "scale": "calibrated",
+    "class_by": [
+     "country",
+     "src"
+    ],
+    "default": 0.72,
+    "unseen": "default",
+    "thresholds": {
+     "country=India|src=2": 0.73,
+     "country=India|src=3": 0.76,
+     "country=US|src=2": 0.83,
+     "country=US|src=3": 0.83
+    },
+    "fit": {
+     "objective": "macro_f05",
+     "beta": 0.5,
+     "floor": null,
+     "min_support": 200,
+     "passes": 4,
+     "grid": [
+      0.05,
+      0.98,
+      0.01
+     ],
+     "global_threshold": 0.72,
+     "n_entities": 111329,
+     "n_link_rows": 518180,
+     "decoy_weight": 2.0186122648459817,
+     "support": {
+      "country=India|src=2": 41442,
+      "country=India|src=3": 41626,
+      "country=US|src=2": 61726,
+      "country=US|src=3": 62248
+     },
+     "classes_below_min_support": [],
+     "trace": [
+      {
+       "pass": 0,
+       "class": 0,
+       "threshold": 0.73,
+       "objective": 0.9903170891113716
+      },
+      {
+       "pass": 0,
+       "class": 1,
+       "threshold": 0.76,
+       "objective": 0.9903458836731559
+      },
+      {
+       "pass": 0,
+       "class": 2,
+       "threshold": 0.83,
+       "objective": 0.9903463144566124
+      },
+      {
+       "pass": 0,
+       "class": 3,
+       "threshold": 0.83,
+       "objective": 0.9903711788345779
+      },
+      {
+       "pass": 1,
+       "class": 0,
+       "threshold": 0.73,
+       "objective": 0.9903711788345779
+      },
+      {
+       "pass": 1,
+       "class": 1,
+       "threshold": 0.76,
+       "objective": 0.9903711788345779
+      },
+      {
+       "pass": 1,
+       "class": 2,
+       "threshold": 0.83,
+       "objective": 0.9903711788345779
+      },
+      {
+       "pass": 1,
+       "class": 3,
+       "threshold": 0.83,
+       "objective": 0.9903711788345779
+      }
+     ],
+     "seconds": 13.76,
+     "checkpoint": "ckpt_subset05_r150",
+     "density": "global",
+     "decoy_ratio_global": 2.0186122648459817,
+     "decoy_ratios": {},
+     "global_threshold_train_optimal": 0.72
+    }
+   },
+   "links": 149121,
+   "unseen_classes": [],
+   "per_class_links": {
+    "country=US|src=2": {
+     "records": 76466,
+     "links": 43506,
+     "threshold": 0.83
+    },
+    "country=India|src=3": {
+     "records": 52537,
+     "links": 30339,
+     "threshold": 0.76
+    },
+    "country=US|src=3": {
+     "records": 79393,
+     "links": 46415,
+     "threshold": 0.83
+    },
+    "country=India|src=2": {
+     "records": 50657,
+     "links": 28861,
+     "threshold": 0.73
+    }
+   },
+   "overall": {
+    "n_entities": 44144,
+    "macro_f05": 0.991919375171606,
+    "macro_f05_non_singletons": 0.991610423605589,
+    "singleton_share": 0.05572671257702066,
+    "singleton_acc": 0.9971544715447155,
+    "micro_precision": 0.9991014008757988,
+    "micro_recall": 0.9778359717518574,
+    "mean_entity_precision": 0.9971222542850746,
+    "mean_entity_recall": 0.9775715683228158,
+    "entities_perfect": 0.9267397607828923,
+    "entities_zero": 0.0021293947082276186
+   },
+   "per_country": {
+    "India": {
+     "n_entities": 17562,
+     "macro_f05": 0.9914808925346527,
+     "macro_f05_non_singletons": 0.9909566873001435,
+     "singleton_share": 0.05796606309076415,
+     "singleton_acc": 1.0,
+     "micro_precision": 0.9988682432432432,
+     "micro_recall": 0.976517215754273,
+     "mean_entity_precision": 0.9967484255549415,
+     "mean_entity_recall": 0.9763933742823371,
+     "entities_perfect": 0.9231864252363057,
+     "entities_zero": 0.0020498804236419544
+    },
+    "US": {
+     "n_entities": 26582,
+     "macro_f05": 0.9922090686510345,
+     "macro_f05_non_singletons": 0.9920406309817742,
+     "singleton_share": 0.05424723497103303,
+     "singleton_acc": 0.9951456310679612,
+     "micro_precision": 0.9992549015246717,
+     "micro_recall": 0.9787057913712164,
+     "mean_entity_precision": 0.9973682615448726,
+     "mean_entity_recall": 0.9783469081082445,
+     "entities_perfect": 0.9290873523436912,
+     "entities_zero": 0.0021819276201941163
+    }
+   }
+  },
+  "country_src_indic": {
+   "policy_path": "/tmp/claude-0/-home-user-AMAZON-ML-Challenege/6563b5fb-eb95-5cab-946b-63b001dfde86/scratchpad/exp/work05/checkpoints/ckpt_subset05_r150/thresholds/country_src_indic.json",
+   "policy": {
+    "version": 1,
+    "name": "country|src|indic",
+    "scheme": "per_class",
+    "scale": "calibrated",
+    "class_by": [
+     "country",
+     "src",
+     "indic"
+    ],
+    "default": 0.72,
+    "unseen": "default",
+    "thresholds": {
+     "country=India|src=2|indic=0": 0.79,
+     "country=India|src=2|indic=1": 0.73,
+     "country=India|src=3|indic=0": 0.76,
+     "country=India|src=3|indic=1": 0.77,
+     "country=US|src=2|indic=0": 0.83,
+     "country=US|src=3|indic=0": 0.83
+    },
+    "fit": {
+     "objective": "macro_f05",
+     "beta": 0.5,
+     "floor": null,
+     "min_support": 200,
+     "passes": 4,
+     "grid": [
+      0.05,
+      0.98,
+      0.01
+     ],
+     "global_threshold": 0.72,
+     "n_entities": 111329,
+     "n_link_rows": 518180,
+     "decoy_weight": 2.0186122648459817,
+     "support": {
+      "country=India|src=2|indic=0": 35644,
+      "country=India|src=2|indic=1": 14612,
+      "country=India|src=3|indic=0": 39455,
+      "country=India|src=3|indic=1": 9847,
+      "country=US|src=2|indic=0": 61726,
+      "country=US|src=3|indic=0": 62248
+     },
+     "classes_below_min_support": [],
+     "trace": [
+      {
+       "pass": 0,
+       "class": 0,
+       "threshold": 0.79,
+       "objective": 0.9903181834884008
+      },
+      {
+       "pass": 0,
+       "class": 1,
+       "threshold": 0.73,
+       "objective": 0.9903207668984737
+      },
+      {
+       "pass": 0,
+       "class": 2,
+       "threshold": 0.76,
+       "objective": 0.9903454181923151
+      },
+      {
+       "pass": 0,
+       "class": 3,
+       "threshold": 0.77,
+       "objective": 0.9903527046691945
+      },
+      {
+       "pass": 0,
+       "class": 4,
+       "threshold": 0.83,
+       "objective": 0.9903531354526509
+      },
+      {
+       "pass": 0,
+       "class": 5,
+       "threshold": 0.83,
+       "objective": 0.9903779998306165
+      },
+      {
+       "pass": 1,
+       "class": 0,
+       "threshold": 0.79,
+       "objective": 0.9903779998306165
+      },
+      {
+       "pass": 1,
+       "class": 1,
+       "threshold": 0.73,
+       "objective": 0.9903779998306165
+      },
+      {
+       "pass": 1,
+       "class": 2,
+       "threshold": 0.76,
+       "objective": 0.9903779998306165
+      },
+      {
+       "pass": 1,
+       "class": 3,
+       "threshold": 0.77,
+       "objective": 0.9903779998306165
+      },
+      {
+       "pass": 1,
+       "class": 4,
+       "threshold": 0.83,
+       "objective": 0.9903779998306165
+      },
+      {
+       "pass": 1,
+       "class": 5,
+       "threshold": 0.83,
+       "objective": 0.9903779998306165
+      }
+     ],
+     "seconds": 20.6,
+     "checkpoint": "ckpt_subset05_r150",
+     "density": "global",
+     "decoy_ratio_global": 2.0186122648459817,
+     "decoy_ratios": {},
+     "global_threshold_train_optimal": 0.72
+    }
+   },
+   "links": 149089,
+   "unseen_classes": [],
+   "per_class_links": {
+    "country=US|src=2|indic=0": {
+     "records": 76466,
+     "links": 43506,
+     "threshold": 0.83
+    },
+    "country=India|src=2|indic=0": {
+     "records": 38614,
+     "links": 21954,
+     "threshold": 0.79
+    },
+    "country=India|src=2|indic=1": {
+     "records": 12043,
+     "links": 6875,
+     "threshold": 0.73
+    },
+    "country=India|src=3|indic=0": {
+     "records": 45534,
+     "links": 26310,
+     "threshold": 0.76
+    },
+    "country=US|src=3|indic=0": {
+     "records": 79393,
+     "links": 46415,
+     "threshold": 0.83
+    },
+    "country=India|src=3|indic=1": {
+     "records": 7003,
+     "links": 4029,
+     "threshold": 0.77
+    }
+   },
+   "overall": {
+    "n_entities": 44144,
+    "macro_f05": 0.9918865266284296,
+    "macro_f05_non_singletons": 0.9915756364908691,
+    "singleton_share": 0.05572671257702066,
+    "singleton_acc": 0.9971544715447155,
+    "micro_precision": 0.9991347450180764,
+    "micro_recall": 0.9776587645375548,
+    "mean_entity_precision": 0.9971422459685343,
+    "mean_entity_recall": 0.9773811618176365,
+    "entities_perfect": 0.9262640449438202,
+    "entities_zero": 0.0021520478434215295
+   },
+   "per_country": {
+    "India": {
+     "n_entities": 17562,
+     "macro_f05": 0.9913983241432401,
+     "macro_f05_non_singletons": 0.990869038237644,
+     "singleton_share": 0.05796606309076415,
+     "singleton_acc": 1.0,
+     "micro_precision": 0.9989521362898864,
+     "micro_recall": 0.9760713401040376,
+     "mean_entity_precision": 0.9967987962835038,
+     "mean_entity_recall": 0.9759136290718737,
+     "entities_perfect": 0.9219906616558479,
+     "entities_zero": 0.0021068215465208976
+    },
+    "US": {
+     "n_entities": 26582,
+     "macro_f05": 0.9922090686510345,
+     "macro_f05_non_singletons": 0.9920406309817742,
+     "singleton_share": 0.05424723497103303,
+     "singleton_acc": 0.9951456310679612,
+     "micro_precision": 0.9992549015246717,
+     "micro_recall": 0.9787057913712164,
+     "mean_entity_precision": 0.9973682615448726,
+     "mean_entity_recall": 0.9783469081082445,
+     "entities_perfect": 0.9290873523436912,
+     "entities_zero": 0.0021819276201941163
+    }
+   }
+  },
+  "country_src_noaddr": {
+   "policy_path": "/tmp/claude-0/-home-user-AMAZON-ML-Challenege/6563b5fb-eb95-5cab-946b-63b001dfde86/scratchpad/exp/work05/checkpoints/ckpt_subset05_r150/thresholds/country_src_noaddr.json",
+   "policy": {
+    "version": 1,
+    "name": "country|src|noaddr",
+    "scheme": "per_class",
+    "scale": "calibrated",
+    "class_by": [
+     "country",
+     "src",
+     "noaddr"
+    ],
+    "default": 0.72,
+    "unseen": "default",
+    "thresholds": {
+     "country=India|src=2|noaddr=0": 0.71,
+     "country=India|src=2|noaddr=1": 0.89,
+     "country=India|src=3|noaddr=0": 0.76,
+     "country=India|src=3|noaddr=1": 0.87,
+     "country=US|src=2|noaddr=0": 0.8,
+     "country=US|src=2|noaddr=1": 0.73,
+     "country=US|src=3|noaddr=0": 0.82,
+     "country=US|src=3|noaddr=1": 0.85
+    },
+    "fit": {
+     "objective": "macro_f05",
+     "beta": 0.5,
+     "floor": null,
+     "min_support": 200,
+     "passes": 4,
+     "grid": [
+      0.05,
+      0.98,
+      0.01
+     ],
+     "global_threshold": 0.72,
+     "n_entities": 111329,
+     "n_link_rows": 518180,
+     "decoy_weight": 2.0186122648459817,
+     "support": {
+      "country=India|src=2|noaddr=0": 41086,
+      "country=India|src=2|noaddr=1": 2709,
+      "country=India|src=3|noaddr=0": 41288,
+      "country=India|src=3|noaddr=1": 2910,
+      "country=US|src=2|noaddr=0": 61050,
+      "country=US|src=2|noaddr=1": 4931,
+      "country=US|src=3|noaddr=0": 61684,
+      "country=US|src=3|noaddr=1": 5002
+     },
+     "classes_below_min_support": [],
+     "trace": [
+      {
+       "pass": 0,
+       "class": 0,
+       "threshold": 0.71,
+       "objective": 0.990320772194506
+      },
+      {
+       "pass": 0,
+       "class": 1,
+       "threshold": 0.89,
+       "objective": 0.9903301613506901
+      },
+      {
+       "pass": 0,
+       "class": 2,
+       "threshold": 0.76,
+       "objective": 0.9903416266407898
+      },
+      {
+       "pass": 0,
+       "class": 3,
+       "threshold": 0.87,
+       "objective": 0.9903614319228938
+      },
+      {
+       "pass": 0,
+       "class": 4,
+       "threshold": 0.8,
+       "objective": 0.9903687399048103
+      },
+      {
+       "pass": 0,
+       "class": 5,
+       "threshold": 0.73,
+       "objective": 0.9903704183188317
+      },
+      {
+       "pass": 0,
+       "class": 6,
+       "threshold": 0.82,
+       "objective": 0.9903901637991139
+      },
+      {
+       "pass": 0,
+       "class": 7,
+       "threshold": 0.85,
+       "objective": 0.9904013349392079
+      },
+      {
+       "pass": 1,
+       "class": 0,
+       "threshold": 0.71,
+       "objective": 0.9904013349392079
+      },
+      {
+       "pass": 1,
+       "class": 1,
+       "threshold": 0.89,
+       "objective": 0.9904013349392079
+      },
+      {
+       "pass": 1,
+       "class": 2,
+       "threshold": 0.76,
+       "objective": 0.9904013349392079
+      },
+      {
+       "pass": 1,
+       "class": 3,
+       "threshold": 0.87,
+       "objective": 0.9904013349392079
+      },
+      {
+       "pass": 1,
+       "class": 4,
+       "threshold": 0.8,
+       "objective": 0.9904013349392079
+      },
+      {
+       "pass": 1,
+       "class": 5,
+       "threshold": 0.73,
+       "objective": 0.9904013349392079
+      },
+      {
+       "pass": 1,
+       "class": 6,
+       "threshold": 0.82,
+       "objective": 0.9904013349392079
+      },
+      {
+       "pass": 1,
+       "class": 7,
+       "threshold": 0.85,
+       "objective": 0.9904013349392079
+      }
+     ],
+     "seconds": 29.13,
+     "checkpoint": "ckpt_subset05_r150",
+     "density": "global",
+     "decoy_ratio_global": 2.0186122648459817,
+     "decoy_ratios": {},
+     "global_threshold_train_optimal": 0.72
+    }
+   },
+   "links": 149113,
+   "unseen_classes": [],
+   "per_class_links": {
+    "country=India|src=2|noaddr=1": {
+     "records": 1135,
+     "links": 690,
+     "threshold": 0.89
+    },
+    "country=US|src=2|noaddr=0": {
+     "records": 74217,
+     "links": 42183,
+     "threshold": 0.8
+    },
+    "country=India|src=3|noaddr=0": {
+     "records": 51191,
+     "links": 29580,
+     "threshold": 0.76
+    },
+    "country=India|src=2|noaddr=0": {
+     "records": 49522,
+     "links": 28152,
+     "threshold": 0.71
+    },
+    "country=US|src=2|noaddr=1": {
+     "records": 2249,
+     "links": 1352,
+     "threshold": 0.73
+    },
+    "country=US|src=3|noaddr=1": {
+     "records": 2251,
+     "links": 1324,
+     "threshold": 0.85
+    },
+    "country=India|src=3|noaddr=1": {
+     "records": 1346,
+     "links": 739,
+     "threshold": 0.87
+    },
+    "country=US|src=3|noaddr=0": {
+     "records": 77142,
+     "links": 45093,
+     "threshold": 0.82
+    }
+   },
+   "overall": {
+    "n_entities": 44144,
+    "macro_f05": 0.9918700141093283,
+    "macro_f05_non_singletons": 0.9915581494780297,
+    "singleton_share": 0.05572671257702066,
+    "singleton_acc": 0.9971544715447155,
+    "micro_precision": 0.9990946463420359,
+    "micro_recall": 0.9777769026804232,
+    "mean_entity_precision": 0.9971038619362916,
+    "mean_entity_recall": 0.9774380905162499,
+    "entities_perfect": 0.9265132294309533,
+    "entities_zero": 0.0021520478434215295
+   },
+   "per_country": {
+    "India": {
+     "n_entities": 17562,
+     "macro_f05": 0.9913502272136023,
+     "macro_f05_non_singletons": 0.9908179817653097,
+     "singleton_share": 0.05796606309076415,
+     "singleton_acc": 1.0,
+     "micro_precision": 0.9989520123054039,
+     "micro_recall": 0.9759557427132359,
+     "mean_entity_precision": 0.9967977888689326,
+     "mean_entity_recall": 0.9757324383654171,
+     "entities_perfect": 0.9215351326728163,
+     "entities_zero": 0.0021068215465208976
+    },
+    "US": {
+     "n_entities": 26582,
+     "macro_f05": 0.9922134230876873,
+     "macro_f05_non_singletons": 0.9920452351836477,
+     "singleton_share": 0.05424723497103303,
+     "singleton_acc": 0.9951456310679612,
+     "micro_precision": 0.9991884560654571,
+     "micro_recall": 0.9789780958293849,
+     "mean_entity_precision": 0.997305280903133,
+     "mean_entity_recall": 0.9785605371822557,
+     "entities_perfect": 0.9298021217365134,
+     "entities_zero": 0.0021819276201941163
+    }
+   }
+  },
+  "global": {
+   "policy_path": "/tmp/claude-0/-home-user-AMAZON-ML-Challenege/6563b5fb-eb95-5cab-946b-63b001dfde86/scratchpad/exp/work05/checkpoints/ckpt_subset05_r150/thresholds/global.json",
+   "policy": {
+    "version": 1,
+    "name": "global",
+    "scheme": "global",
+    "scale": "calibrated",
+    "class_by": [],
+    "default": 0.72,
+    "unseen": "default",
+    "thresholds": {},
+    "fit": {
+     "objective": "macro_f05",
+     "beta": 0.5,
+     "floor": null,
+     "min_support": 200,
+     "passes": 4,
+     "grid": [
+      0.05,
+      0.98,
+      0.01
+     ],
+     "global_threshold": 0.72,
+     "n_entities": 111329,
+     "n_link_rows": 518180,
+     "decoy_weight": 2.0186122648459817,
+     "seconds": 0.02,
+     "checkpoint": "ckpt_subset05_r150",
+     "density": "global",
+     "decoy_ratio_global": 2.0186122648459817,
+     "decoy_ratios": {},
+     "global_threshold_train_optimal": 0.72
+    }
+   },
+   "links": 149302,
+   "unseen_classes": [],
+   "per_class_links": {},
+   "overall": {
+    "n_entities": 44144,
+    "macro_f05": 0.9919503929480233,
+    "macro_f05_non_singletons": 0.9916672619301781,
+    "singleton_share": 0.05572671257702066,
+    "singleton_acc": 0.9967479674796748,
+    "micro_precision": 0.9987876920603876,
+    "micro_recall": 0.978715444593211,
+    "mean_entity_precision": 0.996919310138411,
+    "mean_entity_recall": 0.9784460521565886,
+    "entities_perfect": 0.928619971003987,
+    "entities_zero": 0.002061435302645886
+   },
+   "per_country": {
+    "India": {
+     "n_entities": 17562,
+     "macro_f05": 0.9915482246331255,
+     "macro_f05_non_singletons": 0.991028162536687,
+     "singleton_share": 0.05796606309076415,
+     "singleton_acc": 1.0,
+     "micro_precision": 0.9987002903247586,
+     "micro_recall": 0.97707868879531,
+     "mean_entity_precision": 0.9966416396103895,
+     "mean_entity_recall": 0.9769960960286758,
+     "entities_perfect": 0.9244391299396424,
+     "entities_zero": 0.001992939300763011
+    },
+    "US": {
+     "n_entities": 26582,
+     "macro_f05": 0.992216094548589,
+     "macro_f05_non_singletons": 0.9920878371237308,
+     "singleton_share": 0.05424723497103303,
+     "singleton_acc": 0.9944521497919556,
+     "micro_precision": 0.9988451886561993,
+     "micro_recall": 0.9797950092038907,
+     "mean_entity_precision": 0.9971020381103914,
+     "mean_entity_recall": 0.979400231718251,
+     "entities_perfect": 0.9313821382890678,
+     "entities_zero": 0.002106688736739147
+    }
+   }
+  },
+  "global_train": {
+   "policy_path": "/tmp/claude-0/-home-user-AMAZON-ML-Challenege/6563b5fb-eb95-5cab-946b-63b001dfde86/scratchpad/exp/work05/checkpoints/ckpt_subset05_r150/thresholds/global_train.json",
+   "policy": {
+    "version": 1,
+    "name": "global_train",
+    "scheme": "global",
+    "scale": "calibrated",
+    "class_by": [],
+    "default": 0.72,
+    "unseen": "default",
+    "thresholds": {},
+    "fit": {
+     "source": "train.py OOF sweep",
+     "objective": "macro_f05",
+     "oof_macro_f05": 0.9908747496582192
+    }
+   },
+   "links": 149302,
+   "unseen_classes": [],
+   "per_class_links": {},
+   "overall": {
+    "n_entities": 44144,
+    "macro_f05": 0.9919503929480233,
+    "macro_f05_non_singletons": 0.9916672619301781,
+    "singleton_share": 0.05572671257702066,
+    "singleton_acc": 0.9967479674796748,
+    "micro_precision": 0.9987876920603876,
+    "micro_recall": 0.978715444593211,
+    "mean_entity_precision": 0.996919310138411,
+    "mean_entity_recall": 0.9784460521565886,
+    "entities_perfect": 0.928619971003987,
+    "entities_zero": 0.002061435302645886
+   },
+   "per_country": {
+    "India": {
+     "n_entities": 17562,
+     "macro_f05": 0.9915482246331255,
+     "macro_f05_non_singletons": 0.991028162536687,
+     "singleton_share": 0.05796606309076415,
+     "singleton_acc": 1.0,
+     "micro_precision": 0.9987002903247586,
+     "micro_recall": 0.97707868879531,
+     "mean_entity_precision": 0.9966416396103895,
+     "mean_entity_recall": 0.9769960960286758,
+     "entities_perfect": 0.9244391299396424,
+     "entities_zero": 0.001992939300763011
+    },
+    "US": {
+     "n_entities": 26582,
+     "macro_f05": 0.992216094548589,
+     "macro_f05_non_singletons": 0.9920878371237308,
+     "singleton_share": 0.05424723497103303,
+     "singleton_acc": 0.9944521497919556,
+     "micro_precision": 0.9988451886561993,
+     "micro_recall": 0.9797950092038907,
+     "mean_entity_precision": 0.9971020381103914,
+     "mean_entity_recall": 0.979400231718251,
+     "entities_perfect": 0.9313821382890678,
+     "entities_zero": 0.002106688736739147
+    }
+   }
+  },
+  "indic": {
+   "policy_path": "/tmp/claude-0/-home-user-AMAZON-ML-Challenege/6563b5fb-eb95-5cab-946b-63b001dfde86/scratchpad/exp/work05/checkpoints/ckpt_subset05_r150/thresholds/indic.json",
+   "policy": {
+    "version": 1,
+    "name": "indic",
+    "scheme": "per_class",
+    "scale": "calibrated",
+    "class_by": [
+     "indic"
+    ],
+    "default": 0.72,
+    "unseen": "default",
+    "thresholds": {
+     "indic=0": 0.72,
+     "indic=1": 0.77
+    },
+    "fit": {
+     "objective": "macro_f05",
+     "beta": 0.5,
+     "floor": null,
+     "min_support": 200,
+     "passes": 4,
+     "grid": [
+      0.05,
+      0.98,
+      0.01
+     ],
+     "global_threshold": 0.72,
+     "n_entities": 111329,
+     "n_link_rows": 518180,
+     "decoy_weight": 2.0186122648459817,
+     "support": {
+      "indic=0": 108623,
+      "indic=1": 16204
+     },
+     "classes_below_min_support": [],
+     "trace": [
+      {
+       "pass": 0,
+       "class": 0,
+       "threshold": 0.72,
+       "objective": 0.9903144589081061
+      },
+      {
+       "pass": 0,
+       "class": 1,
+       "threshold": 0.77,
+       "objective": 0.9903201368834362
+      },
+      {
+       "pass": 1,
+       "class": 0,
+       "threshold": 0.72,
+       "objective": 0.9903201368834362
+      },
+      {
+       "pass": 1,
+       "class": 1,
+       "threshold": 0.77,
+       "objective": 0.9903201368834362
+      }
+     ],
+     "seconds": 7.27,
+     "checkpoint": "ckpt_subset05_r150",
+     "density": "global",
+     "decoy_ratio_global": 2.0186122648459817,
+     "decoy_ratios": {},
+     "global_threshold_train_optimal": 0.72
+    }
+   },
+   "links": 149295,
+   "unseen_classes": [],
+   "per_class_links": {
+    "indic=0": {
+     "records": 240007,
+     "links": 138395,
+     "threshold": 0.72
+    },
+    "indic=1": {
+     "records": 19046,
+     "links": 10900,
+     "threshold": 0.77
+    }
+   },
+   "overall": {
+    "n_entities": 44144,
+    "macro_f05": 0.9919410430921487,
+    "macro_f05_non_singletons": 0.9916573602883555,
+    "singleton_share": 0.05572671257702066,
+    "singleton_acc": 0.9967479674796748,
+    "micro_precision": 0.9987876352188619,
+    "micro_recall": 0.9786695019820955,
+    "mean_entity_precision": 0.996919310138411,
+    "mean_entity_recall": 0.9784074682075113,
+    "entities_perfect": 0.9284840521928235,
+    "entities_zero": 0.002061435302645886
+   },
+   "per_country": {
+    "India": {
+     "n_entities": 17562,
+     "macro_f05": 0.9915247227519195,
+     "macro_f05_non_singletons": 0.9910032145169977,
+     "singleton_share": 0.05796606309076415,
+     "singleton_acc": 1.0,
+     "micro_precision": 0.9987001367388625,
+     "micro_recall": 0.9769630914045083,
+     "mean_entity_precision": 0.9966416396103895,
+     "mean_entity_recall": 0.9768988805225507,
+     "entities_perfect": 0.9240974832023687,
+     "entities_zero": 0.001992939300763011
+    },
+    "US": {
+     "n_entities": 26582,
+     "macro_f05": 0.992216094548589,
+     "macro_f05_non_singletons": 0.9920878371237308,
+     "singleton_share": 0.05424723497103303,
+     "singleton_acc": 0.9944521497919556,
+     "micro_precision": 0.9988451886561993,
+     "micro_recall": 0.9797950092038907,
+     "mean_entity_precision": 0.9971020381103914,
+     "mean_entity_recall": 0.979400231718251,
+     "entities_perfect": 0.9313821382890678,
+     "entities_zero": 0.002106688736739147
+    }
+   }
+  },
+  "noaddr": {
+   "policy_path": "/tmp/claude-0/-home-user-AMAZON-ML-Challenege/6563b5fb-eb95-5cab-946b-63b001dfde86/scratchpad/exp/work05/checkpoints/ckpt_subset05_r150/thresholds/noaddr.json",
+   "policy": {
+    "version": 1,
+    "name": "noaddr",
+    "scheme": "per_class",
+    "scale": "calibrated",
+    "class_by": [
+     "noaddr"
+    ],
+    "default": 0.72,
+    "unseen": "default",
+    "thresholds": {
+     "noaddr=0": 0.76,
+     "noaddr=1": 0.83
+    },
+    "fit": {
+     "objective": "macro_f05",
+     "beta": 0.5,
+     "floor": null,
+     "min_support": 200,
+     "passes": 4,
+     "grid": [
+      0.05,
+      0.98,
+      0.01
+     ],
+     "global_threshold": 0.72,
+     "n_entities": 111329,
+     "n_link_rows": 518180,
+     "decoy_weight": 2.0186122648459817,
+     "support": {
+      "noaddr=0": 109874,
+      "noaddr=1": 14513
+     },
+     "classes_below_min_support": [],
+     "trace": [
+      {
+       "pass": 0,
+       "class": 0,
+       "threshold": 0.76,
+       "objective": 0.9903195118037277
+      },
+      {
+       "pass": 0,
+       "class": 1,
+       "threshold": 0.83,
+       "objective": 0.990338998981624
+      },
+      {
+       "pass": 1,
+       "class": 0,
+       "threshold": 0.76,
+       "objective": 0.990338998981624
+      },
+      {
+       "pass": 1,
+       "class": 1,
+       "threshold": 0.83,
+       "objective": 0.990338998981624
+      }
+     ],
+     "seconds": 7.08,
+     "checkpoint": "ckpt_subset05_r150",
+     "density": "global",
+     "decoy_ratio_global": 2.0186122648459817,
+     "decoy_ratios": {},
+     "global_threshold_train_optimal": 0.72
+    }
+   },
+   "links": 149138,
+   "unseen_classes": [],
+   "per_class_links": {
+    "noaddr=1": {
+     "records": 6981,
+     "links": 4107,
+     "threshold": 0.83
+    },
+    "noaddr=0": {
+     "records": 252072,
+     "links": 145031,
+     "threshold": 0.76
+    }
+   },
+   "overall": {
+    "n_entities": 44144,
+    "macro_f05": 0.9918973649469054,
+    "macro_f05_non_singletons": 0.9916111044577343,
+    "singleton_share": 0.05572671257702066,
+    "singleton_acc": 0.9967479674796748,
+    "micro_precision": 0.9990679773096058,
+    "micro_recall": 0.9779147305137696,
+    "mean_entity_precision": 0.9971148288026467,
+    "mean_entity_recall": 0.9776106473040548,
+    "entities_perfect": 0.9268983327292497,
+    "entities_zero": 0.0021520478434215295
+   },
+   "per_country": {
+    "India": {
+     "n_entities": 17562,
+     "macro_f05": 0.9913854971124727,
+     "macro_f05_non_singletons": 0.9908554219227058,
+     "singleton_share": 0.05796606309076415,
+     "singleton_acc": 1.0,
+     "micro_precision": 0.999002586512941,
+     "micro_recall": 0.9758731731483775,
+     "mean_entity_precision": 0.9968511818412084,
+     "mean_entity_recall": 0.9757051662138099,
+     "entities_perfect": 0.9214781915499374,
+     "entities_zero": 0.0021068215465208976
+    },
+    "US": {
+     "n_entities": 26582,
+     "macro_f05": 0.9922355420181679,
+     "macro_f05_non_singletons": 0.9921084000766484,
+     "singleton_share": 0.05424723497103303,
+     "singleton_acc": 0.9944521497919556,
+     "micro_precision": 0.9991109629382675,
+     "micro_recall": 0.9792612924658802,
+     "mean_entity_precision": 0.9972883282191157,
+     "mean_entity_recall": 0.9788645963556465,
+     "entities_perfect": 0.9304792716876081,
+     "entities_zero": 0.0021819276201941163
+    }
+   }
+  },
+  "src": {
+   "policy_path": "/tmp/claude-0/-home-user-AMAZON-ML-Challenege/6563b5fb-eb95-5cab-946b-63b001dfde86/scratchpad/exp/work05/checkpoints/ckpt_subset05_r150/thresholds/src.json",
+   "policy": {
+    "version": 1,
+    "name": "src",
+    "scheme": "per_class",
+    "scale": "calibrated",
+    "class_by": [
+     "src"
+    ],
+    "default": 0.72,
+    "unseen": "default",
+    "thresholds": {
+     "src=2": 0.72,
+     "src=3": 0.76
+    },
+    "fit": {
+     "objective": "macro_f05",
+     "beta": 0.5,
+     "floor": null,
+     "min_support": 200,
+     "passes": 4,
+     "grid": [
+      0.05,
+      0.98,
+      0.01
+     ],
+     "global_threshold": 0.72,
+     "n_entities": 111329,
+     "n_link_rows": 518180,
+     "decoy_weight": 2.0186122648459817,
+     "support": {
+      "src=2": 103168,
+      "src=3": 103874
+     },
+     "classes_below_min_support": [],
+     "trace": [
+      {
+       "pass": 0,
+       "class": 0,
+       "threshold": 0.72,
+       "objective": 0.9903144589081061
+      },
+      {
+       "pass": 0,
+       "class": 1,
+       "threshold": 0.76,
+       "objective": 0.9903478594439158
+      },
+      {
+       "pass": 1,
+       "class": 0,
+       "threshold": 0.72,
+       "objective": 0.9903478594439158
+      },
+      {
+       "pass": 1,
+       "class": 1,
+       "threshold": 0.76,
+       "objective": 0.9903478594439158
+      }
+     ],
+     "seconds": 6.71,
+     "checkpoint": "ckpt_subset05_r150",
+     "density": "global",
+     "decoy_ratio_global": 2.0186122648459817,
+     "decoy_ratios": {},
+     "global_threshold_train_optimal": 0.72
+    }
+   },
+   "links": 149238,
+   "unseen_classes": [],
+   "per_class_links": {
+    "src=3": {
+     "records": 131930,
+     "links": 76807,
+     "threshold": 0.76
+    },
+    "src=2": {
+     "records": 127123,
+     "links": 72431,
+     "threshold": 0.72
+    }
+   },
+   "overall": {
+    "n_entities": 44144,
+    "macro_f05": 0.991932061442016,
+    "macro_f05_non_singletons": 0.9916478485821023,
+    "singleton_share": 0.05572671257702066,
+    "singleton_acc": 0.9967479674796748,
+    "micro_precision": 0.9989144855867809,
+    "micro_recall": 0.97842009923604,
+    "mean_entity_precision": 0.9969984772049113,
+    "mean_entity_recall": 0.9781172746423203,
+    "entities_perfect": 0.928098948894527,
+    "entities_zero": 0.002106741573033708
+   },
+   "per_country": {
+    "India": {
+     "n_entities": 17562,
+     "macro_f05": 0.9914918518635114,
+     "macro_f05_non_singletons": 0.9909683209880916,
+     "singleton_share": 0.05796606309076415,
+     "singleton_acc": 1.0,
+     "micro_precision": 0.9988514677566462,
+     "micro_recall": 0.9765997853191314,
+     "mean_entity_precision": 0.9967383514092292,
+     "mean_entity_recall": 0.9764709452043229,
+     "entities_perfect": 0.9234141897278214,
+     "entities_zero": 0.0020498804236419544
+    },
+    "US": {
+     "n_entities": 26582,
+     "macro_f05": 0.992222895864471,
+     "macro_f05_non_singletons": 0.9920950285548674,
+     "singleton_share": 0.05424723497103303,
+     "singleton_acc": 0.9944521497919556,
+     "micro_precision": 0.9989559267815887,
+     "micro_recall": 0.9796207343506628,
+     "mean_entity_precision": 0.9971696594309959,
+     "mean_entity_recall": 0.9792006825270547,
+     "entities_perfect": 0.9311940410804304,
+     "entities_zero": 0.0021443081784666314
+    }
+   }
+  }
+ }
+}
