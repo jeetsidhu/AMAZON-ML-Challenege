@@ -141,9 +141,9 @@ def rowwise_dot(A, B, ia, ib, chunk=1_000_000):
     return out
 
 
-def run_country(rec, country, args, tmp_root, keep_k=None):
+def run_country(rec, country, args, tmp_root, keep_k=None, truth=None):
     """Returns (candidates DataFrame with exact cosines for rank < keep_k, diagnostic DataFrame of
-    (t_rid, s_rid, rank) for every retrieved pair or None when keep_k is None)."""
+    (t_rid, s_rid, rank) for every *true* pair that was retrieved, or None when keep_k is None)."""
     S = rec.filter((pl.col("src") == 1) & (pl.col("country") == country)).select("rid", *BLOCKS)
     T = rec.filter((pl.col("src") != 1) & (pl.col("country") == country)).select("rid", *BLOCKS)
     nS, nT = S.height, T.height
@@ -190,15 +190,24 @@ def run_country(rec, country, args, tmp_root, keep_k=None):
             if k % 100 == 0:
                 log(f"[{country}] retrieval {k + 1}/{len(bounds)}")
     shutil.rmtree(tmp, ignore_errors=True)
-    tl = np.concatenate([r[0] for r in res])
-    sl = np.concatenate([r[1] for r in res])
-    score = np.concatenate([r[2] for r in res])
-    rank = np.concatenate([r[3] for r in res])
-    del res
-    log(f"[{country}] pairs retrieved {len(tl)}")
+    # one pass into preallocated arrays (a concatenate would hold two copies of ~50M pairs at the peak)
+    n_pairs = sum(len(r[0]) for r in res)
+    tl = np.empty(n_pairs, dtype=np.int64)
+    sl = np.empty(n_pairs, dtype=np.int32)
+    score = np.empty(n_pairs, dtype=np.float32)
+    rank = np.empty(n_pairs, dtype=np.int16)
+    pos = 0
+    while res:
+        r = res.pop()
+        m = len(r[0])
+        tl[pos:pos + m], sl[pos:pos + m], score[pos:pos + m], rank[pos:pos + m] = r
+        pos += m
+    log(f"[{country}] pairs retrieved {n_pairs}")
     diag = None
     if keep_k is not None:
+        # recall diagnostic: keep only the rank of each true pair (a few M rows), not every retrieved pair
         diag = pl.DataFrame({"t_rid": t_rid[tl].astype(np.uint32), "s_rid": s_rid[sl].astype(np.uint32), "rank": rank})
+        diag = truth.join(diag, on=["t_rid", "s_rid"], how="inner").select("t_rid", "s_rid", "rank")
         sel = rank < keep_k  # exact cosines only for the pairs that will actually be scored
         tl, sl, score, rank = tl[sel], sl[sel], score[sel], rank[sel]
 
@@ -241,29 +250,43 @@ def run(args):
     rec = rec.with_columns(pl.col("country").fill_null(""))
     countries = rec.filter(pl.col("src") == 1)["country"].unique().sort().to_list()
     tmp_root = os.path.join(d, "block_tmp")
-    outs, diags = [], []
+    parts_dir = os.path.join(d, "cand_parts")
+    shutil.rmtree(parts_dir, ignore_errors=True)
+    os.makedirs(parts_dir)
     diag = args.split == "train" and args.recall_k > args.topk
     keep_k = args.topk
-    if diag:
-        args.topk = args.recall_k  # retrieve deeper once, only to measure recall@k (cosines stay top-keep_k)
-    for c in countries:
-        r, dg = run_country(rec, c, args, tmp_root, keep_k if diag else None)
-        if r is not None:
-            outs.append(r)
-            if dg is not None:
-                diags.append(dg)
-    cand = pl.concat(outs)
+    truth = None
     if diag:
         from pair_features import truth_pairs  # noqa: E402  (label use is diagnostic only)
         ids = pl.read_parquet(os.path.join(d, "records.parquet"), columns=["rid", "entity_id"])
-        truth = truth_pairs(ids, args.data_dir)
-        hit = truth.join(pl.concat(diags), on=["t_rid", "s_rid"], how="left")
+        truth = truth_pairs(ids, args.data_dir).select("t_rid", "s_rid")
+        args.topk = args.recall_k  # retrieve deeper once, only to measure recall@k (cosines stay top-keep_k)
+    hits = []
+    n_parts = 0
+    for i, c in enumerate(countries):
+        # each country's candidates go straight to disk: the full data has ~80M retrieved pairs and
+        # holding every country's frame until the end is what used to exhaust a 16 GB machine
+        r, dg = run_country(rec, c, args, tmp_root, keep_k if diag else None, truth)
+        if r is not None:
+            r.write_parquet(os.path.join(parts_dir, f"part_{i:03d}.parquet"))
+            n_parts += 1
+            if dg is not None:
+                hits.append(dg)
+        del r, dg
+    del rec
+    if diag:
+        hit = truth.join(pl.concat(hits) if hits else truth.head(0).with_columns(pl.lit(0, pl.Int16).alias("rank")), on=["t_rid", "s_rid"], how="left")
         rec_at = {k: float((hit["rank"].fill_null(10**6) < k).mean()) for k in range(1, args.recall_k + 1)}
         with open(os.path.join(d, "blocking_recall.json"), "w") as f:
             json.dump({"n_true_pairs": truth.height, "recall_at_k": rec_at, "topk_kept": keep_k}, f, indent=1)
         log("retrieval recall@k (true pairs found within rank k):", {k: round(v, 4) for k, v in rec_at.items()})
-    cand.write_parquet(os.path.join(d, "candidates_raw.parquet"))
-    log("candidates_raw", cand.shape)
+    out_path = os.path.join(d, "candidates_raw.parquet")
+    if n_parts == 0:
+        raise SystemExit("no candidate pairs retrieved")
+    pl.scan_parquet(os.path.join(parts_dir, "part_*.parquet")).sink_parquet(out_path)  # streaming concat
+    shutil.rmtree(parts_dir, ignore_errors=True)
+    shape = pl.scan_parquet(out_path).select(pl.len()).collect().item()
+    log("candidates_raw", (shape, 7))
 
 
 if __name__ == "__main__":
