@@ -1,0 +1,49 @@
+{
+ "n_true_pairs": 385020,
+ "pair_recall": 0.9919328866032934,
+ "pair_recall_by_channel": {
+  "combined": 0.9905823074126019,
+  "name": 0.7179393278271259,
+  "nchar": 0.7329151732377539,
+  "addr": 0.8980208820321022,
+  "cross": 0.8338242169237962,
+  "rare": 0.6727053140096618,
+  "hn": 0.6897537790244662,
+  "rev": 0.7167160147524804
+ },
+ "true_pairs_found_by_one_channel_only": {
+  "combined": 2505,
+  "name": 1,
+  "nchar": 370,
+  "addr": 32,
+  "cross": 5,
+  "rare": 0,
+  "hn": 8,
+  "rev": 34
+ },
+ "entities": 111329,
+ "entities_with_matches": 105012,
+ "entity_complete_coverage": 0.9730221308040986,
+ "entity_zero_coverage": 0.0005332723879175713,
+ "oracle_macro_f05": 0.9975544160953308,
+ "oracle_macro_f05_non_singletons": 0.9974073019224191,
+ "candidates_per_record": 6.516349654370101,
+ "candidates_total": 3377613,
+ "channels": {
+  "combined": 5,
+  "name": 3,
+  "nchar": 3,
+  "addr": 2,
+  "cross": 2,
+  "rare": 3,
+  "hn": 2,
+  "rev": 3
+ },
+ "misses": {
+  "ambiguous_true_pairs": 5852,
+  "missed_ambiguous": 2183,
+  "missed_recoverable": 923,
+  "recall_on_recoverable": 0.9975657228458098
+ },
+ "recall_at_k": {}
+}

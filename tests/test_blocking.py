@@ -87,7 +87,7 @@ def test_union_keeps_rank_per_channel(tmp_path):
         return out
     blocking.run_pool, orig = serial_pool, blocking.run_pool
     try:
-        out = blocking.run_country(rec, "US", args, str(tmp_path), blocking.parse_channels(blocking.DEFAULT_CHANNELS))
+        out = blocking.run_country(rec, "US", args, str(tmp_path), blocking.parse_channels("combined=3,name=2,nchar=2,addr=1,cross=1,rare=2,hn=2,rev=2"))
     finally:
         blocking.run_pool = orig
     assert out.select("t_rid", "s_rid").unique().height == out.height

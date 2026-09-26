@@ -120,7 +120,9 @@ python src/predict.py        --data-dir $D --work-dir $W --out-dir output   # --
 (character 4-grams of the compact name: typos, concatenations, transliterations), `addr`, `cross`, `rare`
 (shared rare name tokens), `hn` (house number + street key) and `rev` (bidirectional: every Source 1 record
 retrieves its top-k Source 2/3 records). `--channels "combined=5,nchar=3,addr=2,rev=2"` sets the channels
-and their k; `combined=3` reproduces the previous candidate set. Every pair keeps its rank in every channel
+and their k; `combined=3` reproduces the previous candidate set and `combined=5` is the default (the
+multi-channel unions raise candidate recall further, at 2x the blocking time; see `docs/REPORT.md` 14.1 /
+14.4 for what each buys end to end). Every pair keeps its rank in every channel
 and the number of channels that proposed it (retrieval agreement) as features. On the training split the
 step writes a **candidate audit** (`work/train/blocking_recall.json`): true-pair recall of the union and per
 channel, the share of Source 1 entities whose complete record set was retrieved, the candidate *oracle*
@@ -128,6 +130,10 @@ macro F0.5 (a perfect classifier on this candidate set) and the split of the mis
 address-less record whose entity has exact-name namesakes: no retrieval can single it out) and
 *recoverable*. The channel configuration is chosen on end-to-end macro F0.5, not on recall alone
 (`docs/REPORT.md` section 14).
+
+`pair_features.py --token-idf` adds Source 1 IDF-weighted rare-token features; they are off by default because
+they raise the out-of-fold score but lower the shifted hold-out score (they do not transfer between corpora;
+`docs/REPORT.md` 14.4).
 
 ### Decision rule
 

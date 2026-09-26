@@ -1,0 +1,28 @@
+{
+ "n_true_pairs": 385020,
+ "pair_recall": 0.98820580749052,
+ "pair_recall_by_channel": {
+  "combined": 0.98820580749052
+ },
+ "true_pairs_found_by_one_channel_only": {
+  "combined": 380479
+ },
+ "entities": 111329,
+ "entities_with_matches": 105012,
+ "entity_complete_coverage": 0.9611472974517198,
+ "entity_zero_coverage": 0.0008665676303660534,
+ "oracle_macro_f05": 0.9963252006086057,
+ "oracle_macro_f05_non_singletons": 0.996104142941335,
+ "candidates_per_record": 2.9801304565980935,
+ "candidates_total": 1544244,
+ "channels": {
+  "combined": 3
+ },
+ "misses": {
+  "ambiguous_true_pairs": 5852,
+  "missed_ambiguous": 2785,
+  "missed_recoverable": 1756,
+  "recall_on_recoverable": 0.9953688074943033
+ },
+ "recall_at_k": {}
+}

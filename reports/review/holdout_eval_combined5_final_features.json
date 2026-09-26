@@ -1,0 +1,43 @@
+{
+ "overall": {
+  "n_entities": 44144,
+  "macro_f05": 0.9921779415083272,
+  "macro_f05_non_singletons": 0.9919082393710681,
+  "singleton_share": 0.05572671257702066,
+  "singleton_acc": 0.9967479674796748,
+  "micro_precision": 0.998675328324558,
+  "micro_recall": 0.9797130555774329,
+  "mean_entity_precision": 0.9968497866792176,
+  "mean_entity_recall": 0.979501336967631,
+  "entities_perfect": 0.930885284523378,
+  "entities_zero": 0.001970822761870243
+ },
+ "per_country": {
+  "India": {
+   "n_entities": 17562,
+   "macro_f05": 0.9919129226092414,
+   "macro_f05_non_singletons": 0.9914757463046117,
+   "singleton_share": 0.05796606309076415,
+   "singleton_acc": 0.9990176817288802,
+   "micro_precision": 0.9985508955802315,
+   "micro_recall": 0.9786309966146478,
+   "mean_entity_precision": 0.9966272479736574,
+   "mean_entity_recall": 0.9785708289198981,
+   "entities_perfect": 0.927855597312379,
+   "entities_zero": 0.001935998177884068
+  },
+  "US": {
+   "n_entities": 26582,
+   "macro_f05": 0.9923530322428752,
+   "macro_f05_non_singletons": 0.9921928521511577,
+   "singleton_share": 0.05424723497103303,
+   "singleton_acc": 0.9951456310679612,
+   "micro_precision": 0.9987572677644134,
+   "micro_recall": 0.9804267555468418,
+   "mean_entity_precision": 0.9969962337891931,
+   "mean_entity_recall": 0.980113680847571,
+   "entities_perfect": 0.9328869159581672,
+   "entities_zero": 0.0019938304115566926
+  }
+ }
+}

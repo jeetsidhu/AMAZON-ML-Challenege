@@ -28,8 +28,9 @@ the UNION of all channels):
              on the combined score (a record crowded out of a namesake's top-k is still proposed
              by the entity that wants it)
 
---channels chooses the channels and their k, e.g. "combined=3,name=2,nchar=2,rare=2,hn=2,rev=2";
-"combined=3" reproduces the previous single-channel candidate set exactly (up to the extra columns).
+--channels chooses the channels and their k, e.g. "combined=5,nchar=3,addr=2,rev=2" or
+"combined=3,name=2,nchar=2,addr=1,cross=1,rare=2,hn=2,rev=2"; "combined=3" reproduces the previous
+single-channel candidate set exactly (up to the extra columns); the default is "combined=5".
 
 For every retrieved pair the exact per-block cosines (all shared features, no df cap) are computed;
 `score` is the exact combined cosine and `rank` the pair's rank by that score within its Source 2/3
@@ -63,7 +64,9 @@ BLOCKS = ("feat_name", "feat_addr", "feat_cross", "feat_nchar")
 BLOCK_NAMES = ("name", "addr", "cross", "nchar")
 COMBINED = ("name", "addr", "cross")  # blocks whose cosines add up to the combined score
 CHANNELS = ("combined", "name", "nchar", "addr", "cross", "rare", "hn", "rev")
-DEFAULT_CHANNELS = "combined=3,name=2,nchar=2,addr=1,cross=1,rare=2,hn=2,rev=2"
+# default: the configuration validated end to end on the shifted hold-out (docs/REPORT.md 14.4); the
+# multi-channel unions ("combined=5,nchar=3,addr=2,rev=2", or all channels) raise candidate recall further
+DEFAULT_CHANNELS = "combined=5"
 # minimum retrieval score per channel (cosines for the tf-idf channels; any shared feature for rare / hn)
 MIN_SCORE = {"combined": 0.1, "name": 0.2, "nchar": 0.3, "addr": 0.3, "cross": 0.2, "rare": 1e-6, "hn": 0.5, "rev": 0.1}
 

@@ -1,0 +1,1014 @@
+{
+ "policy": {
+  "version": 2,
+  "name": "global_train",
+  "scheme": "global",
+  "scale": "calibrated",
+  "class_by": [],
+  "default": 0.76,
+  "unseen": "default",
+  "thresholds": {},
+  "margin": 0.0,
+  "contra_penalty": 0.0,
+  "fit": {
+   "source": "select_threshold.py",
+   "method": "train",
+   "decoy_ratio": 2.0186122648459817,
+   "oof_macro_f05": 0.9917275824162651
+  }
+ },
+ "entities": 111329,
+ "macro_f05": 0.9917275824162649,
+ "total_points_lost": 0.00827241758373504,
+ "perfect_entities": 0.9250958869656604,
+ "links": 376903,
+ "true_pairs": 385020,
+ "records_found": 376398,
+ "missing_multi": {
+  "entities": 7687,
+  "points_lost": 0.005446109073870356
+ },
+ "priority": [
+  "blocking_miss",
+  "wrong_top",
+  "below_threshold",
+  "fp_decoy",
+  "fp_wrong_entity",
+  "singleton_fp"
+ ],
+ "categories": {
+  "blocking_miss": {
+   "entities": 3270,
+   "entity_share": 0.0293724007221838,
+   "macro_f05_points_lost": 0.0029690463341961325,
+   "share_of_total_loss": 0.35890914646690164,
+   "mean_entity_f05": 0.8989171378165992,
+   "by_country": {
+    "India": {
+     "entities": 1613,
+     "points_lost": 0.00154569507484657
+    },
+    "US": {
+     "entities": 1657,
+     "points_lost": 0.0014233512593495629
+    }
+   },
+   "missing_multi_entities": 3197,
+   "records": {
+    "records": 3626,
+    "indic": 0.08549365692222835,
+    "alias": 0.004688361831218974,
+    "domain": 0.054329840044125756,
+    "no_address": 0.729453943739658,
+    "s1_has_namesakes": 0.8163265306122449,
+    "source3_share": 0.5642581356867071
+   }
+  },
+  "wrong_top": {
+   "entities": 2310,
+   "entity_share": 0.020749310601909654,
+   "macro_f05_points_lost": 0.002049927073710075,
+   "share_of_total_loss": 0.2478026590123515,
+   "mean_entity_f05": 0.9012050514333034,
+   "by_country": {
+    "US": {
+     "entities": 1456,
+     "points_lost": 0.0013586036591676845
+    },
+    "India": {
+     "entities": 854,
+     "points_lost": 0.0006913234145423902
+    }
+   },
+   "missing_multi_entities": 2241,
+   "records": {
+    "records": 2460,
+    "indic": 0.008130081300813009,
+    "alias": 0.0065040650406504065,
+    "domain": 0.011788617886178862,
+    "no_address": 0.9495934959349593,
+    "s1_has_namesakes": 0.9032520325203252,
+    "source3_share": 0.5191056910569106
+   }
+  },
+  "below_threshold": {
+   "entities": 2265,
+   "entity_share": 0.020345103252521805,
+   "macro_f05_points_lost": 0.0020268412981451615,
+   "share_of_total_loss": 0.24501196628785654,
+   "mean_entity_f05": 0.9003769470723167,
+   "by_country": {
+    "India": {
+     "entities": 920,
+     "points_lost": 0.0008305424065562029
+    },
+    "US": {
+     "entities": 1345,
+     "points_lost": 0.0011962988915889586
+    }
+   },
+   "missing_multi_entities": 2219,
+   "records": {
+    "records": 2536,
+    "indic": 0.031545741324921134,
+    "alias": 0.007097791798107256,
+    "domain": 0.019321766561514197,
+    "no_address": 0.6222397476340694,
+    "s1_has_namesakes": 0.7180599369085173,
+    "source3_share": 0.5157728706624606
+   },
+   "rejected_by": {
+    "threshold": 2536,
+    "margin": 0,
+    "contradiction": 0
+   }
+  },
+  "fp_decoy": {
+   "entities": 345,
+   "entity_share": 0.00309892301197352,
+   "macro_f05_points_lost": 0.0007172864868088684,
+   "share_of_total_loss": 0.08670820585981706,
+   "mean_entity_f05": 0.7685368484349437,
+   "by_country": {
+    "US": {
+     "entities": 179,
+     "points_lost": 0.0003532637531464688
+    },
+    "India": {
+     "entities": 166,
+     "points_lost": 0.0003640227336623996
+    }
+   },
+   "missing_multi_entities": 23,
+   "records": {
+    "records": 368,
+    "indic": 0.04619565217391304,
+    "alias": 0.002717391304347826,
+    "domain": 0.02717391304347826,
+    "no_address": 0.08423913043478261,
+    "s1_has_namesakes": 0.3179347826086957,
+    "source3_share": 0.5108695652173914
+   }
+  },
+  "fp_wrong_entity": {
+   "entities": 122,
+   "entity_share": 0.0010958510361181724,
+   "macro_f05_points_lost": 0.0002667919812420919,
+   "share_of_total_loss": 0.032250787456214694,
+   "mean_entity_f05": 0.7565435698385177,
+   "by_country": {
+    "India": {
+     "entities": 71,
+     "points_lost": 0.00016037446704225998
+    },
+    "US": {
+     "entities": 51,
+     "points_lost": 0.00010641751419983192
+    }
+   },
+   "missing_multi_entities": 7,
+   "records": {
+    "records": 137,
+    "indic": 0.1678832116788321,
+    "alias": 0.0,
+    "domain": 0.0072992700729927005,
+    "no_address": 0.45985401459854014,
+    "s1_has_namesakes": 0.49635036496350365,
+    "source3_share": 0.5912408759124088
+   }
+  },
+  "singleton_fp": {
+   "entities": 27,
+   "entity_share": 0.00024252440963271025,
+   "macro_f05_points_lost": 0.00024252440963271025,
+   "share_of_total_loss": 0.02931723491685839,
+   "mean_entity_f05": 0.0,
+   "by_country": {
+    "India": {
+     "entities": 8,
+     "points_lost": 7.185908433561785e-05
+    },
+    "US": {
+     "entities": 19,
+     "points_lost": 0.0001706653252970924
+    }
+   },
+   "missing_multi_entities": 0,
+   "records": {
+    "records": 29,
+    "indic": 0.034482758620689655,
+    "alias": 0.0,
+    "domain": 0.034482758620689655,
+    "no_address": 0.13793103448275862,
+    "s1_has_namesakes": 0.3448275862068966,
+    "source3_share": 0.4482758620689655
+   }
+  }
+ },
+ "base_rates": {
+  "true_pairs": {
+   "records": 385020,
+   "indic": 0.07381175003895901,
+   "alias": 0.02105085450106488,
+   "domain": 0.051602514155108824,
+   "no_address": 0.0439873253337489,
+   "s1_has_namesakes": 0.4001921978079061,
+   "source3_share": 0.5166121240455042
+  },
+  "s1_has_namesakes": 0.4001921978079061
+ },
+ "examples": {
+  "blocking_miss": [
+   {
+    "s1": "My Big Hospitality Private Limited",
+    "s1_addr": "Plot No 4, Row House, Adoni Ypr Home Bypass, Kurnool, Andhra Pradesh",
+    "record": "#mybig",
+    "record_addr": "KURNOOL, Andhra Pradesh, 4",
+    "p_true": null,
+    "p_best": 0.07837352156639099,
+    "n_namesakes": 1
+   },
+   {
+    "s1": "Shree Global Private Limited",
+    "s1_addr": "Pl -35, S No 24 25 Shikshak Nagar Wanwadi, Pune, Maharashtra, Pune",
+    "record": "श्री ग्लोबल प्राइवेट लिमिटेड",
+    "record_addr": "PL -3-5, PUNE, Maharashtra",
+    "p_true": null,
+    "p_best": 4.388207526062615e-05,
+    "n_namesakes": 42
+   },
+   {
+    "s1": "Swastik Marketing Private Limited",
+    "s1_addr": "No 2, Shree Laksmi Nilaya, 4Th Cross, 24Th Main Road, Jp Nagar, 5Th Phase, Near Big Market, Bangalore, Karnataka",
+    "record": "ಸ್ವಸ್ತಿಕ್ ಮಾರ್ಕೆಟಿಂಗ್ ಪ್ರೈವೇಟ್ ಲಿಮಿಟೆಡ್",
+    "record_addr": "H.NO 2, BANGALORE, Karnataka",
+    "p_true": null,
+    "p_best": 0.005113054998219013,
+    "n_namesakes": 34
+   },
+   {
+    "s1": "Laxmi Foods Private Limited",
+    "s1_addr": "29/033A, Near Oel House, Rana Pratap Marg Hazratganj, Lucknow, Uttar Pradesh",
+    "record": "लक्ष्मी फूड्स प्राइवेट लिमिटेड",
+    "record_addr": "Uttar Pradesh, 29/033A, CHANDRAWAL, NEAR OEL HOUSE, LUCKNOW",
+    "p_true": null,
+    "p_best": 0.013368755578994751,
+    "n_namesakes": 43
+   },
+   {
+    "s1": "Durga College Pvt Ltd",
+    "s1_addr": "131, 2Nd Floor Hargovind Enclave, New Delhi, East Delhi, Delhi",
+    "record": "Durga Co1lege Pvt Ltd",
+    "record_addr": null,
+    "p_true": null,
+    "p_best": 0.2714400887489319,
+    "n_namesakes": 1
+   },
+   {
+    "s1": "Williams Companies Inc",
+    "s1_addr": "9878 145th Avenue E, Owasso, OK",
+    "record": "Williams Comphlies Inc",
+    "record_addr": null,
+    "p_true": null,
+    "p_best": 0.025236906483769417,
+    "n_namesakes": 1
+   },
+   {
+    "s1": "Keystone Talent Corporation",
+    "s1_addr": "18107 Stone Trail Manor Drive, Humble, TX",
+    "record": "Keystone Corporation Service",
+    "record_addr": null,
+    "p_true": null,
+    "p_best": 0.00029629727941937745,
+    "n_namesakes": 2
+   },
+   {
+    "s1": "International Properties Private Limited",
+    "s1_addr": "Gujarat, Ahmedabad, Silver Radiance One, Near Zydus Hospital Hebatpur, Road, Thaltej, 401, Ahmedabad",
+    "record": "International Ppecttres Private Limited",
+    "record_addr": null,
+    "p_true": null,
+    "p_best": null,
+    "n_namesakes": 35
+   },
+   {
+    "s1": "Zenith Inc",
+    "s1_addr": "4651 Pierce Drive, Manhattan, KS",
+    "record": "Zenith Inc Trading",
+    "record_addr": null,
+    "p_true": null,
+    "p_best": 0.025341568514704704,
+    "n_namesakes": 38
+   },
+   {
+    "s1": "Essdee Memorial Trust",
+    "s1_addr": "Shop No. 4, First Floor, Vill-Barola, Noida, G B Nagar, Noida, Up, Noida, Uttar Pradesh, Gautam Buddha Nagar",
+    "record": "emtrustcom",
+    "record_addr": "GAUTAM BUDDH NAGAR, Uttar Pradesh, SOHP NO. 4, NOIDA",
+    "p_true": null,
+    "p_best": 0.14260391891002655,
+    "n_namesakes": 1
+   },
+   {
+    "s1": "Arihant & Partners",
+    "s1_addr": "No 12A, Hudson Avenue Seethapathy Nagar, Velachery, Chennai, Tamil Nadu",
+    "record": "PYRÁIRIZEPH",
+    "record_addr": "NO 12A, CHENNAI, Tamil Nadu",
+    "p_true": null,
+    "p_best": 0.03856925666332245,
+    "n_namesakes": 1
+   },
+   {
+    "s1": "Sree Foundation Private Limited",
+    "s1_addr": "Lmcpl, 57/1A, 1St Floor, Unit-24, Devarabisanahalli Junction, Outer Ring Road, Bellandur Pos, T, Bangalore, Karnataka",
+    "record": "Sri Sree Foundation Private [Limited]",
+    "record_addr": null,
+    "p_true": null,
+    "p_best": 0.050778578966856,
+    "n_namesakes": 45
+   },
+   {
+    "s1": "Cultural Initiative",
+    "s1_addr": "1625 Aspen Street, Cottonwood, AZ",
+    "record": "Cultural  Initiative Trading",
+    "record_addr": null,
+    "p_true": null,
+    "p_best": 0.05752790719270706,
+    "n_namesakes": 33
+   },
+   {
+    "s1": "Commission on Aging",
+    "s1_addr": "2260 Brookbank Drive, Grove City, OH",
+    "record": "Commission on Aging LP",
+    "record_addr": null,
+    "p_true": null,
+    "p_best": 0.01893461123108864,
+    "n_namesakes": 90
+   },
+   {
+    "s1": "Wandis Mccusker Highland Public",
+    "s1_addr": "330 Cottage Avenue, Unit Apartment G9, Saint Paul, MN",
+    "record": "Wandis Mccusker Highland",
+    "record_addr": null,
+    "p_true": null,
+    "p_best": 0.3825232684612274,
+    "n_namesakes": 11
+   }
+  ],
+  "wrong_top": [
+   {
+    "s1": "Theis Floating Inc",
+    "s1_addr": "1 Anna Street, Metropolis, IL",
+    "record": "Theis Flong  Inc",
+    "record_addr": null,
+    "p_true": 0.7014980912208557,
+    "p_best": 0.7526589035987854,
+    "n_namesakes": 2
+   },
+   {
+    "s1": "Mumbai Shipping Pvt. Ltd.",
+    "s1_addr": "C/401, Mahananda Nagar Chs Ltd C&D Wing Kurla New Mill Road Kural W, Mumbai, Mumbai City, Maharashtra",
+    "record": "Xyloxyloaria",
+    "record_addr": "C/401, Mumbai, MH",
+    "p_true": 0.6942160725593567,
+    "p_best": 0.7612741589546204,
+    "n_namesakes": 3
+   },
+   {
+    "s1": "K C & F Grill Inc",
+    "s1_addr": "37 Oxford Street, Winchester, MA",
+    "record": "Rizazetairi",
+    "record_addr": "OXFORD ST, WINCHESTER, MA",
+    "p_true": 0.6839742064476013,
+    "p_best": 0.7034465670585632,
+    "n_namesakes": 1
+   },
+   {
+    "s1": "Lakshya Components Private Limited",
+    "s1_addr": "345, Shivaji Road, Meerut, Uttar Pradesh",
+    "record": "Shri Lakshya Components Pvágrte Limited",
+    "record_addr": null,
+    "p_true": 0.672997772693634,
+    "p_best": 0.7180837988853455,
+    "n_namesakes": 2
+   },
+   {
+    "s1": "Liberty Diamond Sunshine",
+    "s1_addr": "12407 Four Mile Road, Unit 1, County, WY",
+    "record": "Liberty Diamond",
+    "record_addr": null,
+    "p_true": 0.6704544425010681,
+    "p_best": 0.7233643531799316,
+    "n_namesakes": 1
+   },
+   {
+    "s1": "Rao & Co",
+    "s1_addr": "No. 4/608, G1, Voc Street Kottivakkam, Mylapore - Triplicane, Chennai, Tamil Nadu",
+    "record": "Rao  Co Services",
+    "record_addr": null,
+    "p_true": 0.6547654271125793,
+    "p_best": 0.6582667231559753,
+    "n_namesakes": 2
+   },
+   {
+    "s1": "Clean Logistics Holdings",
+    "s1_addr": "87-36 Marengo Street, Hollis, NY",
+    "record": "Clean  Logistics Holdings",
+    "record_addr": null,
+    "p_true": 0.6531040668487549,
+    "p_best": 0.6534407734870911,
+    "n_namesakes": 2
+   },
+   {
+    "s1": "E 8 A Tailwind PLLC",
+    "s1_addr": "11111 Shady Trail, Dallas, TX",
+    "record": "E 8 A Tlwidgn PLLC",
+    "record_addr": null,
+    "p_true": 0.6427809000015259,
+    "p_best": 0.6658170819282532,
+    "n_namesakes": 2
+   },
+   {
+    "s1": "Raahi Advisors Company",
+    "s1_addr": "Gali No. 4 H. No. 98, Behind Surat City, Hapur, Ghaziabad, Uttar Pradesh",
+    "record": "Raahi Aviss (Company)",
+    "record_addr": null,
+    "p_true": 0.6363669037818909,
+    "p_best": 0.6936652660369873,
+    "n_namesakes": 2
+   },
+   {
+    "s1": "Express Star Launchpad Inc",
+    "s1_addr": "3617 203rd Street, Douglas County, NE",
+    "record": "Express-Star",
+    "record_addr": null,
+    "p_true": 0.6363356709480286,
+    "p_best": 0.7400079965591431,
+    "n_namesakes": 1
+   },
+   {
+    "s1": "HSC Central Inc",
+    "s1_addr": "2453 Cortland Street, Waynesboro City, VA",
+    "record": "Hsc Central Inc",
+    "record_addr": null,
+    "p_true": 0.6359081864356995,
+    "p_best": 0.6436347961425781,
+    "n_namesakes": 2
+   },
+   {
+    "s1": "AN Foods Pvt. Ltd.",
+    "s1_addr": "Shop B/9 Ff Pramukh Palace, Opp. Gyandeep Classis, Nr. Jay Hind Char Rasta, Ahmadabad City, Ahmedabad, Gujarat",
+    "record": "Orbisol+",
+    "record_addr": "Shop B/9 Ff Pramukh Palace, Opp. Gyandeep Classis, Nr. Jay Hind Char Rasta, Ahmadabad City, Ahmedabad, Gujarat",
+    "p_true": 0.633510947227478,
+    "p_best": 0.8061211109161377,
+    "n_namesakes": 1
+   },
+   {
+    "s1": "Custom Trg",
+    "s1_addr": "7489 Lenore Lane, KY, Unit APARTMENT 1, Florence",
+    "record": "Custom Trg",
+    "record_addr": null,
+    "p_true": 0.6306426525115967,
+    "p_best": 0.7229981422424316,
+    "n_namesakes": 2
+   },
+   {
+    "s1": "Backus's Financial",
+    "s1_addr": "990 500, Unit 3, Bountiful, UT",
+    "record": "BACKUS'S FINANCIA1",
+    "record_addr": null,
+    "p_true": 0.6278072595596313,
+    "p_best": 0.6840488910675049,
+    "n_namesakes": 2
+   },
+   {
+    "s1": "Pankaj Trading Private Limited",
+    "s1_addr": "Building No.29/1132-A, Room No.1, S N Shopping Complex, Pattoor Edappon, No, Oranad, Alappuzha, Kerala",
+    "record": "Pankaj Trading Prívate Limited",
+    "record_addr": null,
+    "p_true": 0.6248120665550232,
+    "p_best": 0.6850050687789917,
+    "n_namesakes": 2
+   }
+  ],
+  "below_threshold": [
+   {
+    "s1": "Internal Medicine Clinic",
+    "s1_addr": "310 Scott Street, Fl 0, Valley Center, KS",
+    "record": "Internal Medicine Clinic Foundation",
+    "record_addr": "Scott Street, Fl 0, Valley Center, Kansas",
+    "p_true": 0.7599552869796753,
+    "p_best": 0.7599552869796753,
+    "n_namesakes": 99
+   },
+   {
+    "s1": "R+ Hudson LLC",
+    "s1_addr": "3840 Saltwell Road, Bridgeport, WV",
+    "record": "R+ Hisdion LLC",
+    "record_addr": null,
+    "p_true": 0.7595576047897339,
+    "p_best": 0.7595576047897339,
+    "n_namesakes": 1
+   },
+   {
+    "s1": "Developers Alumni Builders Pvt Ltd",
+    "s1_addr": "P-103, Garden Paradize, Opp. Nilkanth Villa, Daskroi, Ahmedabad, Gujarat",
+    "record": "Ariaxylo",
+    "record_addr": "P-C-103, AHMEDABAD, Gujarat, GARDEN PARADIZE, OPP. NILKANTH VILLA, DASKROI",
+    "p_true": 0.7592652440071106,
+    "p_best": 0.7592652440071106,
+    "n_namesakes": 1
+   },
+   {
+    "s1": "Jaipur Inns Pvt. Ltd.",
+    "s1_addr": "Flat No. 61E, Oshian Apartment, Shankar Vihar, Near Airport Terminal-2, Jaipur, Rajasthan",
+    "record": "Jaipur Inns Pvt.",
+    "record_addr": "NO 61E/7 , OSHIAN APARTMENT, SHANKAR VIHAR, NEAR AIRPORT TERMINAL-2, JAIPUR, Rajasthan",
+    "p_true": 0.758974015712738,
+    "p_best": 0.758974015712738,
+    "n_namesakes": 1
+   },
+   {
+    "s1": "Foundation Repute Cold Private Limited",
+    "s1_addr": "Plot No 778, S. No.-78, Gokul Plots Vasanth Nagar, Kukatpally, Hyderabad, Telangana",
+    "record": "Jaxxylozeph",
+    "record_addr": "PLHT NO A-778, KUKATPALLY, HYDERABAD, Telangana",
+    "p_true": 0.7589012980461121,
+    "p_best": 0.7589012980461121,
+    "n_namesakes": 1
+   },
+   {
+    "s1": "Talwar Global LLP",
+    "s1_addr": "3Rd Floor 13/1, Howrah, Kolkata, West Bengal, Ratu Sarkar Lane, Kolkata",
+    "record": "Talwar LLP Services",
+    "record_addr": null,
+    "p_true": 0.7588147521018982,
+    "p_best": 0.7588147521018982,
+    "n_namesakes": 1
+   },
+   {
+    "s1": "Black Global Private Limited",
+    "s1_addr": "C/O Pawan Kumar, Kala Amb, Mauja Dera Near Gurudwara, Tehsil Naraingarh, Ambala, Haryana",
+    "record": "Black Global Private #70117",
+    "record_addr": "Plot ##784 C/o Pawan Kumar, Ambala, HR",
+    "p_true": 0.7585470676422119,
+    "p_best": 0.7585470676422119,
+    "n_namesakes": 44
+   },
+   {
+    "s1": "Rodriguez Dental Associates",
+    "s1_addr": "5439 15th Avenue, Phoenix, AZ",
+    "record": "Rodriguez Dental Associates Associates",
+    "record_addr": "15nd Avenue, South Mountain, Arizona",
+    "p_true": 0.7584465742111206,
+    "p_best": 0.7584465742111206,
+    "n_namesakes": 7
+   },
+   {
+    "s1": "Ls College Ltd",
+    "s1_addr": "45, Ratnesh Puram Marris Road, Near Income Tax Office, Aligarh, Uttar Pradesh",
+    "record": "Dr Ls Co1lseg Ltd",
+    "record_addr": null,
+    "p_true": 0.7583396434783936,
+    "p_best": 0.7583396434783936,
+    "n_namesakes": 2
+   },
+   {
+    "s1": "Select Semiconductor Products Inc.",
+    "s1_addr": "Unit 1106, Georgetown, TX, 121 River Bend Drive",
+    "record": "Select Semiconductor Produtcs Inc.",
+    "record_addr": null,
+    "p_true": 0.7582803964614868,
+    "p_best": 0.7582803964614868,
+    "n_namesakes": 1
+   },
+   {
+    "s1": "Pune Media Pvt. Ltd.",
+    "s1_addr": "Plot No12, S.N.50/9, Narkesari Sanstha, Shreeshailya Bunglow, Lane No.27-A, Ganesh Nagar, Dhayar, I, Pune, Maharashtra",
+    "record": "Pune Media Pvt.",
+    "record_addr": "H.no 12, Pune, Warje, MH",
+    "p_true": 0.7577709555625916,
+    "p_best": 0.7577709555625916,
+    "n_namesakes": 1
+   },
+   {
+    "s1": "Thoms Direct Charles LLC",
+    "s1_addr": "3340 1st Avenue, Tucson, AZ",
+    "record": "Th0ms Direct",
+    "record_addr": "1nd Avenue, Tucson, Arizona, NULL",
+    "p_true": 0.7577470541000366,
+    "p_best": 0.7577470541000366,
+    "n_namesakes": 1
+   },
+   {
+    "s1": "Rhodes Otg Inc",
+    "s1_addr": "MA, Unit 4A, Cambridge, 333 A Harvard Street",
+    "record": "Rhodes 0tg",
+    "record_addr": null,
+    "p_true": 0.7575799822807312,
+    "p_best": 0.7575799822807312,
+    "n_namesakes": 1
+   },
+   {
+    "s1": "Ackermann & Fisher Partnership",
+    "s1_addr": "2116 Marsh Lane, Unit 2306, Carrollton, TX",
+    "record": "afisher.com",
+    "record_addr": "MARSH LN, CARROLLTON, TX",
+    "p_true": 0.7574004530906677,
+    "p_best": 0.7574004530906677,
+    "n_namesakes": 2
+   },
+   {
+    "s1": "Hyderabad Rozgar Limited",
+    "s1_addr": "F No.602, Sivani Sadan Hig 365 366 367, 6Th Phase, Kphb Colony, Hyderabad, Telangana",
+    "record": "Nylaaria",
+    "record_addr": "F No.602, Hyderabad, Andhra Pradesh",
+    "p_true": 0.7573427557945251,
+    "p_best": 0.7573427557945251,
+    "n_namesakes": 1
+   }
+  ],
+  "fp_decoy": [
+   {
+    "s1": "Hashmi, Clotilda W., MD, DDS PC",
+    "s1_addr": "7813 Shady Banks Terrace, Chesterfield County, VA",
+    "record": "Hashmi, Clotilda W., MMD, DDS",
+    "record_addr": "7813 SHADY BANKS TER, CHESTERFIELD COUNTY, VA",
+    "p": 0.9999262690544128,
+    "p2nd": 1.4380874745256733e-05,
+    "n_namesakes": 2
+   },
+   {
+    "s1": "Sela Gutierrez, MD",
+    "s1_addr": "8754 Scarlet Oak, Willis, TX",
+    "record": "The Sela Gutierrez, HMD",
+    "record_addr": "WILLIS, TX, 8754 SCARLET OAK",
+    "p": 0.9999251365661621,
+    "p2nd": 1.4380874745256733e-05,
+    "n_namesakes": 1
+   },
+   {
+    "s1": "Mayuresh International Private Limited",
+    "s1_addr": "C/O Harishchandra Kate, Survey No. 43/1/45/5/80, Behind Krushi Vaibhav Lawn, Buldhana, Maharashtra",
+    "record": "Mayuresh Bites Private Ltd",
+    "record_addr": "Buldhana, 80 C/o Harishchandra Kate, Survey No. 43/1/45/5/80, Behind Krushi Vaibhav Lawn, MH, Buldhana",
+    "p": 0.9998984336853027,
+    "p2nd": 1.4369837117556017e-05,
+    "n_namesakes": 1
+   },
+   {
+    "s1": "SDR Continental Newbridge, LLC",
+    "s1_addr": "St. John, 9340 107th Place, IN",
+    "record": "DR Continental Newbridge, L.L.C.",
+    "record_addr": "9340 107rd Pl, ST. JOHN, IN",
+    "p": 0.9998929500579834,
+    "p2nd": 1.934069769049529e-05,
+    "n_namesakes": 1
+   },
+   {
+    "s1": "Patriot Center VI",
+    "s1_addr": "1767 Siebert Way, Fl 0, Grants Pass, OR",
+    "record": "PATRIOT CENTER XVI",
+    "record_addr": "GRANTS PASS CITY, 1767 SIEBERT WAY, OR",
+    "p": 0.9998820424079895,
+    "p2nd": 1.6285401216009632e-05,
+    "n_namesakes": 2
+   },
+   {
+    "s1": "Ivenex Brand LLC",
+    "s1_addr": "8120 Willow Road, Mandan, ND",
+    "record": "Llc Ivenade Brand",
+    "record_addr": "Mandan, 8120 Wilow Rd, North Dakota",
+    "p": 0.9998597502708435,
+    "p2nd": 1.6285401216009632e-05,
+    "n_namesakes": 3
+   },
+   {
+    "s1": "Roopin Solutions Limited",
+    "s1_addr": "674, Gf, Sector-9, Near Esi Hospital, Sohna Adda, Gurgaon, Haryana",
+    "record": "Rupin Solutions-Limited",
+    "record_addr": "674, Sohna Adda, Gurgaon, HR",
+    "p": 0.9998100399971008,
+    "p2nd": 1.456070731364889e-05,
+    "n_namesakes": 2
+   },
+   {
+    "s1": "Sky Solutions",
+    "s1_addr": "Gida, Sector-22 Industrial Area, Gorakhpur, Uttar Pradesh",
+    "record": "Sky Sléutions LLP",
+    "record_addr": "Sector-22 Industrial Area, UP, Gorakhpur, #88 Gida, Gorakhpur",
+    "p": 0.9997369647026062,
+    "p2nd": 1.8530570741859265e-05,
+    "n_namesakes": 6
+   },
+   {
+    "s1": "Kaverora Profiles LLP",
+    "s1_addr": "Unit 1001 To 1007 Unitech, World Cyber Park Tower B, Gurgaon, Haryana",
+    "record": "LLP Kaveroraer Profiles",
+    "record_addr": "UNT 1001 TO 1007 UNITECH, WORLD CYBER PARK TOWER B, GURGAON, हरियाणा",
+    "p": 0.9997197389602661,
+    "p2nd": 1.4380874745256733e-05,
+    "n_namesakes": 1
+   },
+   {
+    "s1": "Alexander Health Trust LLC",
+    "s1_addr": "11671 Zuber Road, Alexander, AR",
+    "record": "Alexander Korquo Trust Llc",
+    "record_addr": "Arkansas, Alexander, 11671c Zuber Road",
+    "p": 0.9997080564498901,
+    "p2nd": 1.4380874745256733e-05,
+    "n_namesakes": 1
+   },
+   {
+    "s1": "Mireielle Marchant Systems",
+    "s1_addr": "3025 Highway 5, Unit Lot 61, Benton, AR",
+    "record": "Mireielle Marchant Systems, Llc",
+    "record_addr": null,
+    "p": 0.9996940493583679,
+    "p2nd": 1.4436300261877477e-05,
+    "n_namesakes": 1
+   },
+   {
+    "s1": "Madhuram India Pvt. Ltd.",
+    "s1_addr": "17/2, Dollar Chamber, Lal Bagh Road, Bangalore, Karnataka",
+    "record": "Madhuram Open Pvt. (Limited)",
+    "record_addr": "17/2, Dollar Chamber, Lal Bagh Road, Bangalore, Bengaluru, KA",
+    "p": 0.9996936321258545,
+    "p2nd": 1.6220890756812878e-05,
+    "n_namesakes": 1
+   },
+   {
+    "s1": "Jarlial Online",
+    "s1_addr": "80 Mt Pleasant Road, Buncombe, IL",
+    "record": "Jarliel  Onlbhne",
+    "record_addr": "80 MT PLEASANT ROAD, BUNCOMBE, IL",
+    "p": 0.9996759295463562,
+    "p2nd": 1.443194651074009e-05,
+    "n_namesakes": 2
+   },
+   {
+    "s1": "Real Dream Tech Private Limited",
+    "s1_addr": "Plot No. 627, Gidc Sachin, Surat, Gujarat",
+    "record": "રિયલ ડ્રીમ ટેક્નોલોજીસ પ્રાઇવેટ લિમિટેડ",
+    "record_addr": "#629, GIDC SACHIN, SURAT, Gujarat",
+    "p": 0.9996375441551208,
+    "p2nd": 2.5860994355753064e-05,
+    "n_namesakes": 1
+   },
+   {
+    "s1": "Super Construction",
+    "s1_addr": "H.No.2-6-45/2, Budwel Villgae Adjacent To Sath Sangh Vihar, Rajendra Nagar, Telangana",
+    "record": "సూపర్ సర్వీసెస్",
+    "record_addr": "H.NO.2-6-45, BUDWEL VILLGAE ADJACENT TO SATH SANGH VIHAR, K.V.RANGAREDDY, Telangana",
+    "p": 0.9995980262756348,
+    "p2nd": 1.4369837117556017e-05,
+    "n_namesakes": 1
+   }
+  ],
+  "fp_wrong_entity": [
+   {
+    "s1": "Jain Producer Private Limited",
+    "s1_addr": "Second Floor, Greater Kailash I, New Delhi, Delhi, # S-222, New Delhi",
+    "record": "जैन प्रोड्यूसर प्राइवेट लिमिटेड",
+    "record_addr": "#10 SECOND FLOOR, NEW DELHI, WEST DELHI, Delhi",
+    "p": 0.9992713928222656,
+    "p2nd": 1.4369837117556017e-05,
+    "n_namesakes": 35
+   },
+   {
+    "s1": "Pune Ventures Private Limited",
+    "s1_addr": "Flat No 304/D2, Sn - 39/5/2/1, Pune, Maharashtra",
+    "record": "Pune Ventures Private",
+    "record_addr": "महाराष्ट्र, Pune, Sn, Pune",
+    "p": 0.9989163875579834,
+    "p2nd": 1.4233277397579513e-05,
+    "n_namesakes": 11
+   },
+   {
+    "s1": "Dream Global Private Limited",
+    "s1_addr": "C/O Mr. Dattatraya Maruti Marne, Flat No. 2 1St Floor, Swapna Sarkar, Shinde Nagar, Kothrud, Pune, Maharashtra",
+    "record": "ड्रीम ग्लोबल प्राइवेट लिमिटेड",
+    "record_addr": "FLAT NO. 02, BOMBAY, Maharashtra",
+    "p": 0.9982736110687256,
+    "p2nd": 1.8170760085922666e-05,
+    "n_namesakes": 27
+   },
+   {
+    "s1": "Bansari (India) Solutions Private Limited",
+    "s1_addr": "Srr Exurbia, Villa # 36, Anekal, Bangalore, Karnataka",
+    "record": "solutionssuper.com",
+    "record_addr": "Villa 36, Bangalore, Bangalore South, KA",
+    "p": 0.9979755878448486,
+    "p2nd": 0.00044394060387276113,
+    "n_namesakes": 1
+   },
+   {
+    "s1": "Alpha Consultancy Private Limited",
+    "s1_addr": "8 Camac Street, Kolkata, Howrah, West Bengal",
+    "record": "Arctavobelo",
+    "record_addr": "H.no 8 Camac Street, Kolkata, Howrah, WB",
+    "p": 0.9974704384803772,
+    "p2nd": 0.0005667609511874616,
+    "n_namesakes": 37
+   },
+   {
+    "s1": "Blue Aditya Services Pvt Ltd",
+    "s1_addr": "Kucha Ustad Dag, 3Rd Floor, Chandni Chowk, 4933, North Delhi, Delhi",
+    "record": "Blue Aditya Private Limited Services",
+    "record_addr": null,
+    "p": 0.9974321126937866,
+    "p2nd": 0.0011294817086309195,
+    "n_namesakes": 1
+   },
+   {
+    "s1": "Shree Benefit Pvt. Ltd.",
+    "s1_addr": "5-79, Narmetta, Jangaon, Warangal Urban, Telangana",
+    "record": "Shri Benefit Pvt Ltd Service",
+    "record_addr": null,
+    "p": 0.9966700673103333,
+    "p2nd": 0.000958477845415473,
+    "n_namesakes": 1
+   },
+   {
+    "s1": "Whiteway Publishers LLP",
+    "s1_addr": "R-903, New Rajinder Nagar, New Delhi, Delhi",
+    "record": "Ectogilddrex",
+    "record_addr": "No 903, South West Delhi, New Delhi, DL",
+    "p": 0.9963287115097046,
+    "p2nd": 1.4380874745256733e-05,
+    "n_namesakes": 1
+   },
+   {
+    "s1": "Delhi Realty Pvt. Ltd.",
+    "s1_addr": "E-10, Lower Ground Floor Lajpat Nagar - Iii, Delhi, South Delhi, Delhi",
+    "record": "Delhi Realty  Pvt. Ltd.",
+    "record_addr": "A-10, Delhi, DL",
+    "p": 0.9943228363990784,
+    "p2nd": 0.03850097954273224,
+    "n_namesakes": 2
+   },
+   {
+    "s1": "Twisted Nails",
+    "s1_addr": "2710 Pioneer Drive, Irving, TX",
+    "record": "Belogild (ID: 9976)",
+    "record_addr": "PIONEER DR, IRVING, TX",
+    "p": 0.9910650849342346,
+    "p2nd": 0.01535150408744812,
+    "n_namesakes": 60
+   },
+   {
+    "s1": "Shyam Foods Private Limited",
+    "s1_addr": "106, Kanara Business Centre - A Wing Laxmi Nagar No.3Link Road, Ghatkopar East, Mumbai, Mumbai City, Maharashtra",
+    "record": "श्याम फूड्स प्राइवेट लिमिटेड",
+    "record_addr": "MUMBAI, 10, Maharashtra, MUMBAI CITY",
+    "p": 0.990191638469696,
+    "p2nd": 0.014551241882145405,
+    "n_namesakes": 30
+   },
+   {
+    "s1": "Future Ventures Pvt Ltd",
+    "s1_addr": "C-195, Golf View Apartments, Saket, New Delhi, South Delhi, Delhi",
+    "record": "फ्यूचर वेंचर्स प्रा. लि.",
+    "record_addr": "F-2, SOUTH DELHI, NEW DELHI, दिल्ली",
+    "p": 0.988099992275238,
+    "p2nd": 0.04864993318915367,
+    "n_namesakes": 16
+   },
+   {
+    "s1": "Shiva Food Private Limited",
+    "s1_addr": "Shop No.-2, H No. 2B-38, Lajpat Nagar, New Delhi, South Delhi, Delhi",
+    "record": "Shiva  Food Private Limited",
+    "record_addr": "02, Delhi, South Delhi, दिल्ली",
+    "p": 0.9877887964248657,
+    "p2nd": 0.008502517826855183,
+    "n_namesakes": 31
+   },
+   {
+    "s1": "Rotondo Advanced",
+    "s1_addr": "3602 Lampe Lane, Williams, AZ",
+    "record": "Rotondo 5anayi [Center]",
+    "record_addr": null,
+    "p": 0.9872605800628662,
+    "p2nd": 0.007129899226129055,
+    "n_namesakes": 1
+   },
+   {
+    "s1": "Shiva Food Private Limited",
+    "s1_addr": "Shop No.-2, H No. 2B-38, Lajpat Nagar, New Delhi, South Delhi, Delhi",
+    "record": "Shiva फूड प्राइवेट लिमिटेड",
+    "record_addr": "02, Delhi, South Delhi, DL",
+    "p": 0.987160325050354,
+    "p2nd": 0.004033466801047325,
+    "n_namesakes": 31
+   }
+  ],
+  "singleton_fp": [
+   {
+    "s1": "Holy Israel Inc.",
+    "s1_addr": "151 Clifton Road, Hohenwald, TN",
+    "record": "Inc Holy Israel",
+    "record_addr": "152 CLMFTON RD, HOHENWALD, TN",
+    "p": 0.9986276030540466
+   },
+   {
+    "s1": "South Cannabis Corporation",
+    "s1_addr": "14923 M Street, Omaha, NE",
+    "record": "South Cannabis Corp",
+    "record_addr": "14936 M ST, OMAHA, NE",
+    "p": 0.9984802007675171
+   },
+   {
+    "s1": "Visakhapatnam Apartments Private Limited",
+    "s1_addr": "9-42-2/6, Flat No 301, Vytla Residency, Balaji Nagar, Cbm Compound, Visakhapatnam, Vishakhapatnam, Andhra Pradesh",
+    "record": "Visakhapatnam Apartments  Limited",
+    "record_addr": "9-42-2/7, FLAT NO 301, VYTLA RESIDENCY, BALAJI NAGAR, CBM COMPOUND, VISAKHAPATNAM, Andhra Pradesh",
+    "p": 0.9978601932525635
+   },
+   {
+    "s1": "Holy Israel Inc.",
+    "s1_addr": "151 Clifton Road, Hohenwald, TN",
+    "record": "H0ly Israel Greater Inc.",
+    "record_addr": "0152 Clifton Road, Hohenwald, Tennessee",
+    "p": 0.9964292049407959
+   },
+   {
+    "s1": "Glyphola Iron Works Inc",
+    "s1_addr": "3130 Oakes Avenue, Unit UNIT B, Everett, WA",
+    "record": "Glyfola Iron  Inc Services",
+    "record_addr": "3130 OAKES AVE, EVERETT, WA",
+    "p": 0.9959612488746643
+   },
+   {
+    "s1": "Golden Business Partners",
+    "s1_addr": "200 Krych Street, City Of Thorp, WI",
+    "record": "Golden Business Partners Ltd",
+    "record_addr": "02 Krych St, PMB 7601, Thoorp, Wisconsin",
+    "p": 0.9946136474609375
+   },
+   {
+    "s1": "East Marketing LLC",
+    "s1_addr": "341 Chelsea Lane, Clinton, TN",
+    "record": "Co East Marketing",
+    "record_addr": "34 Chelsea Lane, Clinton CDP, Tennessee",
+    "p": 0.9944222569465637
+   },
+   {
+    "s1": "Integrated Wellness Consultants LLC",
+    "s1_addr": "100 Indian School Road, Unit 4078, Phoenix, AZ",
+    "record": "#genaburnette",
+    "record_addr": "100 INDIAN SCHOOL ROAD, OSBORN, AZ",
+    "p": 0.9942960739135742
+   },
+   {
+    "s1": "Corporate Mortgage Laboratories",
+    "s1_addr": "NC, Spring Hope, 3213 Old Franklin Road",
+    "record": "Corp Corporate Mortgage Laboratories",
+    "record_addr": "321 OLD FRANKLIN RD, SPRING HOPE, NC",
+    "p": 0.9922181367874146
+   },
+   {
+    "s1": "Goenka & Co",
+    "s1_addr": "Bangalore, 1103 Nimbus Hm World City Jp Nagar 9Th Phase, Karnataka, Bangalore",
+    "record": "llp goenka & co",
+    "record_addr": "110 NIMBUS HM WORLD CITY JP NAGAR 9TH PHASE, BANGALORE, SOUTH II, Karnataka",
+    "p": 0.9920049905776978
+   },
+   {
+    "s1": "Delta Council of New Fairfield",
+    "s1_addr": "2 Gardner Road, New Fairfield, CT",
+    "record": "Delta Council of New Southside Fairfield",
+    "record_addr": "13 1/2 GARDNER ROAD, NEW FAIRFIELD TOWNSHIP, CT",
+    "p": 0.9900741577148438
+   },
+   {
+    "s1": "Aria & Co",
+    "s1_addr": "No 83/16, Singanayakanahalli Village Yelhanka Bangalore, Bangalore, Karnataka",
+    "record": "Aria & Co LLP",
+    "record_addr": "Bengaluru, KA, Bangalore, H.no 83/17",
+    "p": 0.9835386276245117
+   },
+   {
+    "s1": "XL Clean Community",
+    "s1_addr": "36 Leaward, Lakemoor, IL",
+    "record": "Lago Clen Community",
+    "record_addr": "#36 Leaward, Lakemoor, Illinois",
+    "p": 0.9825925230979919
+   },
+   {
+    "s1": "JN Village Private Limited",
+    "s1_addr": "Sr. No. 28, Cts No. 96, Madh Marve Road, Aksa Madh Jetti, Malad (West), Mumbai, Maharashtra",
+    "record": "JX Village Private Limited",
+    "record_addr": "Sr. No. #28, Cts No. 96, Madh Marve Road, Aksa Madh Jetti, Malad (West), Bombay, Mumbai, महाराष्ट्र",
+    "p": 0.9802963137626648
+   },
+   {
+    "s1": "Horizon Marketing Services",
+    "s1_addr": "2210 Leah Drive, Unit 1, Hillsborough, NC",
+    "record": "Horizon Marketing Services Ltd",
+    "record_addr": "# 1, 2211 Leah Drive, North Carolina, Hillsborough",
+    "p": 0.9726786017417908
+   }
+  ]
+ }
+}

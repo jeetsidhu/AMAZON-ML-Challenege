@@ -605,3 +605,170 @@ per-class gain in any configuration is +0.00003.
 | logs | `reports/thresholds/logs/` (training, tuning, hold-out evaluation, resume test, `run.sh` smoke test, the whole 20 % pipeline) |
 | checkpoints used | `work05/checkpoints/ckpt_subset05_r150`, `work20/checkpoints/ckpt_subset20_r150` (local work directories, 45 MB / 180 MB; manifests copied to the report folders); a resumed copy `ckpt_resume_test` reproduced the original OOF result exactly after one fold model was deleted (`subset05_resume_test.log`) |
 | example configurations | `configs/threshold_configs.json` |
+## 14. Review of the matching logic, validation, candidate generation and decision layer
+
+Nine points were raised against the pipeline. Each was first checked against the code and the
+subset results before anything was changed; the table says what was found and what was done.
+Every change was measured before/after on the 5 % subset (111k Source 1 entities, 150/100
+boosting rounds, the same folds and lexicon in every run) with the entity-level metric: out-of-fold
+macro F0.5, its *nested* version (thresholds fit on K-1 folds, scored on the held-out fold), the
+labelled shifted hold-out (44k entities, 2x decoy density), candidate recall and the false-positive
+counts.
+
+| # | claim | verified? | what the code did | what changed |
+|---|---|---|---|---|
+| 1 | global one-to-one assignment | **not present in code** (docs said so) | `model.assign` already linked every Source 2/3 record to its best Source 1 candidate independently; a Source 1 entity could receive any number of records; `predict.write_lists` aggregated per entity | wording fixed everywhere (README, `model.py`); confidence-based rejection added (margin over the runner-up, contradiction rule), see 7 |
+| 2 | optimising pair accuracy | **not present** | `train.py` swept the threshold on macro F0.5 over all Source 1 entities (singletons included) with the sets reconstructed per entity (`thresholds.link_table`); per-country metrics existed | added: singleton false positives, FP split (decoy / wrong entity), per-source (Source 2 vs 3) link metrics, nested macro F0.5 of the final rule |
+| 3 | validation leakage (folds, lexicon, thresholds, calibration) | **fold and lexicon leakage not present**; thresholds / calibration were fit on all OOF predictions and reported in-sample | folds are per Source 1 name group with matched Source 2/3 records inheriting the fold (`folds.py`); lexicon per held-out fold; `leakage_check.py` verifies both | the decision rule is now *selected* nested and the report carries a nested macro F0.5; the per-class comparison was already nested |
+| 4 | candidate generation not audited | **partly**: recall@k of true pairs existed; entity coverage and oracle were missing | `blocking_recall.json` | audit extended: union / per-channel recall, complete-entity coverage, candidate oracle macro F0.5, ambiguous vs recoverable misses |
+| 5 | single retrieval channel | **present** | one TF-IDF channel (name + address + name x place), top-3 per record | multi-channel union: combined, name, char 4-grams, address, cross, rare tokens, house-number keys, reverse (Source 1 -> Source 2/3); per-channel ranks + agreement as features |
+| 6 | stage 2 fed in-sample stage-1 scores | **not present** | stage 2 was trained on out-of-fold stage-1 probabilities (`oof_predict`), the fold model of stage 2 excludes its fold on both sides | competition features added: second-best score, margin over the strongest competitor, candidate count, retrieval agreement (from 5) |
+| 7 | plain thresholding | **present** | `p >= threshold` (global or per class) | threshold + margin over the runner-up + contradiction penalty, selected nested (`thresholds.select_rule`), stored in the policy, applied identically at prediction |
+| 8 | no strong negative evidence | **partly**: house-number relation, legal-form conflict existed | | added: house-number conflict, unit / flat number conflict, postal-like code conflict, digit-group conflict, identical-name-at-contradicting-address, IDF-weighted rare-token conflicts and rare shared tokens |
+| 9 | no entity-level error analysis | **partly**: pair-level categories existed | `tools/error_analysis.py` (per true pair / per link) | rewritten per Source 1 entity: categories ranked by macro F0.5 points lost, singleton errors, missing multiple matches, per-country split |
+
+### 14.1 Candidate generation audit (5 % subset, training split, 385k true pairs)
+
+`blocking.py` now measures its candidate set against the labels (diagnostic only). The misses are
+split into *ambiguous* pairs (an address-less Source 2/3 record whose Source 1 entity has exact-name
+namesakes: 5852 of the 385k true pairs) and *recoverable* ones. The ambiguous pairs cannot be singled
+out by any retrieval - "Urban Cafe" with no address against 45 "Urban Cafe" entities - and are also
+the pairs the matcher must *abstain* on (precision counts twice); they are reported so that retrieval
+work is aimed at the recoverable misses only.
+
+| channels (k) | true-pair recall | complete-entity coverage | candidate oracle macro F0.5 | recoverable misses | candidates / record | blocking wall (4 cores) |
+|---|---|---|---|---|---|---|
+| combined=3 (previous single channel) | 0.9882 | 0.9611 | 0.9963 | 1756 | 2.98 | 23 s |
+| combined=5 | 0.9906 | 0.9687 | 0.9971 | 1338 | 4.92 | 26 s |
+| combined=3, name=2, nchar=2, addr=1, cross=1, rare=2, hn=2, rev=2 | 0.9900 | 0.9667 | 0.9969 | 1191 | 4.22 | 48 s |
+| combined=5, name=3, nchar=3, addr=2, cross=2, rare=3, hn=2, rev=3 | 0.9919 | 0.9730 | 0.9976 | 923 | 6.52 | 51 s |
+
+True pairs found by exactly one channel (multi-channel, larger k): char 4-grams 370, reverse
+retrieval 34, address 32, house-number keys 8, cross 5, name 1, rare tokens 0. The char n-gram
+channel is the one that finds pairs the combined channel cannot (typos such as "Co1lege", concatenated
+names, transliterations without a lexicon entry); the rare-token and house-number channels
+almost never find a pair on their own. The oracle ceiling moves from 0.9963 to 0.9976: retrieval was
+not the bottleneck it looked like from the pair-level error table of section 8, because most
+"retrieval misses" are the ambiguous namesake case.
+
+### 14.2 Matching logic and decision layer
+
+The assignment was already many-to-one: `model.assign` took, independently for every Source 2/3
+record, its best-scoring Source 1 candidate and kept the link when the probability cleared the
+threshold; nothing prevented an entity from receiving several records, and `predict.write_lists`
+aggregated the links per Source 1 entity. The "one-to-one" wording in the README and docstrings
+described the *record* side of the constraint (a record has one entity) and was misleading; it is
+gone. What was missing was confidence-based rejection beyond the threshold. Three rules are now
+available and selected on the data (`thresholds.select_rule`, nested: the threshold is refit on K-1
+folds and applied to the held-out fold for every candidate rule):
+
+| rule (5 % subset, combined=5 candidate set) | nested macro F0.5 |
+|---|---|
+| threshold only | 0.99171 |
+| threshold + margin 0.7 over the runner-up | 0.99177 (+0.00006) |
+| threshold + contradiction penalty 0.1 | 0.99165 |
+| threshold + hard veto of contradicted pairs | 0.96850 (-0.023) |
+
+The margin helps by less than the fold-to-fold standard deviation (0.0002), so the plain
+threshold is kept (`--rule-min-gain 1e-4`), and a hard veto on contradictions is ruinous: 4 % of the
+pairs with a house-number or unit conflict are true matches (corrupted numbers), and the model
+already prices the conflict in through the contradiction features. On the shifted hold-out the
+picture is the same: the best rule with a margin is 0.0003 above the best plain threshold, which is
+within the noise of a 44k-entity hold-out. The rule machinery stays in the pipeline (it costs ~2 min
+of nested sweeps per training run and is re-evaluated on every checkpoint); `predict.py` reports how
+many records each part of the rule rejected.
+
+### 14.3 Validation
+
+Folds, lexicon and stage-2 stacking were checked and were already leak-free (`leakage_check.py`
+passes on every run: no name group in two folds, every matched record in its entity's fold, no
+positive pair across folds, label-shuffle canary AUC 0.50). Two additions: the headline number is
+now also reported *nested* (thresholds fit on K-1 folds; 0.99171 vs 0.99173 in-sample on the
+combined=5 run, i.e. the in-sample optimism of a single global threshold is 0.00002), and the report
+carries singleton false positives, false positives by kind (decoy record vs record of another entity),
+per-source link metrics (Source 2 vs Source 3) next to the per-country entity metrics:
+
+| combined=5 run | precision | recall | FP decoy | FP wrong entity |
+|---|---|---|---|---|
+| Source 2 | 0.99871 | 0.97882 | | |
+| Source 3 | 0.99862 | 0.97699 | | |
+| all | 0.99866 | 0.97761 | 368 | 137 |
+| singleton false positives | 27 of 6317 singletons | | | |
+
+### 14.4 Before / after, end to end (5 % subset; OOF = training split, hold-out = disjoint labelled split with 2x decoy density)
+
+Each row is a full run (blocking, features, 4-fold cross-fitted two-stage model, calibration,
+threshold selection on OOF, prediction on the hold-out with the OOF-selected threshold). The
+hold-out is the number that matters: it is the only one whose thresholds were never tuned on it and
+whose decoy density resembles the test split.
+
+| run | candidates / record | cand. recall | OOF macro F0.5 | nested | P | R | singleton FP | FP decoy / wrong | hold-out macro F0.5 | hold-out P | hold-out R |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| baseline (previous version) | 2.98 | 0.9882 | 0.99086 | - | 0.99842 | 0.97603 | 29 | 445 / 149 | 0.99182 | 0.99893 | 0.97801 |
+| combined=3 + all new features | 2.98 | 0.9882 | 0.99136 | 0.99132 | 0.99871 | 0.97649 | 29 | 353 / 131 | 0.99090 | 0.99922 | 0.97544 |
+| combined=5 + all new features | 4.92 | 0.9906 | 0.99173 | 0.99171 | 0.99866 | 0.97761 | 27 | 368 / 137 | 0.99120 | 0.99921 | 0.97582 |
+| combined=5 + all new features, corpus-size-free idf | 4.92 | 0.9906 | 0.99166 | 0.99158 | 0.99869 | 0.97741 | 26 | 365 / 129 | 0.99118 | 0.99914 | 0.97542 |
+| combined=5, no new feature | 4.92 | 0.9906 | 0.99111 | 0.99106 | 0.99834 | 0.97685 | | | 0.99194 | 0.99879 | 0.97900 |
+| combined=5, new features minus token-idf group (**shipped default**) | 4.92 | 0.9906 | 0.99117 | 0.99115 | 0.99815 | 0.97757 | 30 | 414 / 220 | **0.99218** | 0.99868 | 0.97971 |
+| combined=5, new features minus contradiction group | 4.92 | 0.9906 | 0.99171 | 0.99171 | 0.99855 | 0.97781 | | | 0.99167 | 0.99906 | 0.97739 |
+| combined=5, new features minus stage-2 competition group | 4.92 | 0.9906 | 0.99160 | 0.99157 | 0.99844 | 0.97783 | | | 0.99135 | 0.99902 | 0.97663 |
+| combined=5, new features minus channel group | 4.92 | 0.9906 | 0.99157 | 0.99153 | 0.99846 | 0.97785 | | | 0.99154 | 0.99908 | 0.97667 |
+
+(`reports/review/`: `compare_runs.md`, `ablation_new_feature_groups.txt`, the validation reports,
+hold-out evaluations, candidate audits and error analyses of these runs.)
+
+What the table says:
+
+* **The larger candidate set is a real gain**: with the previous feature set, combined=5 raises the
+  OOF score by 0.00025 and the hold-out by 0.00012 (candidates per record 3 -> 5; blocking +3 s,
+  features and training ~1.6x). It is the new default (`--channels combined=5`).
+* **The token-IDF features are an in-sample illusion**: +0.0005 OOF macro F0.5, -0.0010 on the
+  hold-out, whether or not the idf is normalised by corpus size. The hold-out has 2.5x fewer Source 1
+  records than the training split, and the model learned how rare a token is *in this corpus*. They are
+  kept behind `pair_features.py --token-idf` (off) as a documented negative result. This is exactly
+  the kind of feature the review's implementation rule is about: it would have looked like a clear
+  win on OOF macro F0.5 alone.
+* The contradiction, stage-2 competition and channel groups each add 0.0000-0.0001 OOF and, once the
+  idf group is out, +0.0002 on the hold-out together (0.99218 vs 0.99194); individually they are within
+  noise. They stay because they are cheap, are what the contradiction rule needs, and do not hurt.
+* The hold-out optimum of the threshold moves from 0.73 (baseline) to 0.66-0.71 with the new features,
+  while the OOF optimum stays at 0.75-0.77: the new model is slightly *under*-confident under the
+  decoy shift. `select_threshold.py --method density` already accounts for the density in the F0.5
+  objective; the residual regret on the hold-out is 0.0004 and is the next thing to look at on the
+  full data (`tools/robustness.py`).
+
+### 14.5 Error analysis after the change (OOF, shipped default, 111k entities)
+
+| category (fix priority) | entities | macro F0.5 points lost | share of loss | records: no address | Source 1 has namesakes |
+|---|---|---|---|---|---|
+| blocking_miss | 3267 | 0.00296 | 0.350 | 0.73 | 0.82 |
+| wrong_top | 2302 | 0.00204 | 0.241 | 0.95 | 0.91 |
+| below_threshold | 2100 | 0.00192 | 0.227 | 0.63 | 0.73 |
+| fp_decoy | 388 | 0.00081 | 0.095 | 0.08 | 0.34 |
+| fp_wrong_entity | 200 | 0.00047 | 0.055 | 0.56 | 0.60 |
+| singleton_fp | 30 | 0.00027 | 0.032 | 0.15 | 0.38 |
+
+Total loss 0.0085 points; "missing multiple matches" (entities with >= 2 true records of which some
+were found) accounts for 0.0055 of it. Baseline for comparison: blocking_miss 0.00380, below_threshold
+0.00239, wrong_top 0.00159, fp_decoy 0.00081, fp_wrong_entity 0.00027, singleton_fp 0.00026.
+
+The three largest categories share one signature: address-less Source 2/3 records whose Source 1
+entity has exact-name namesakes (73-95 % of the affected records against a base rate of 4 % / 40 %).
+These are the *ambiguous* pairs of 14.1: the record cannot be told from its namesakes' records by
+any feature, so retrieval either misses it (namesakes fill the candidate list), the model ranks a
+namesake first (wrong_top) or, correctly, abstains (below_threshold). About 0.006 of the 0.0085
+points lost are this one phenomenon, and the precision-first metric says abstaining is right: the
+remaining lever is not the matcher but the data (a second address field would resolve it).
+The fix priority that remains addressable: (1) below_threshold records *with* an address (~37 % of
+that category: calibration / threshold regret under the decoy shift, see 14.4), (2) the ~1.3k
+recoverable retrieval misses (Indic-script names without a lexicon entry; a phonetic channel on the
+unidecode fallback is the obvious candidate), (3) decoy false positives, which are near-copies of the
+entity (section 8) and where the contradiction features did not move the needle.
+
+### 14.6 Runtime
+
+Per training run on the 5 % subset (4 cores): blocking 25 s (was 14 s; the multi-channel
+configurations cost 48-51 s), features 1.6x the previous time (5 candidates per record instead of
+3), training 320 s including the ~130 s nested decision-rule search (was 140 s). On the full data the
+candidate set grows from ~30M to ~50M pairs; the training sample stays capped at 5M rows, so training
+time grows with the rule search and the stage-1/2 OOF scoring only.

@@ -26,9 +26,12 @@ Features (all country-agnostic; the country label itself is never a feature):
   contradict : strong negative evidence: different house numbers on both sides (hn_conflict), different
                unit / flat / suite numbers (unit_conflict), different postal-like codes (pc_conflict),
                no digit group in common although both sides carry numbers (num_conflict), identical
-               names at contradicting addresses (na_conflict), and a Source 1 - IDF weighted view of the
-               name tokens: the rarest token present on one side only (xt_maxidf / xs_maxidf, "rare
-               token conflict") and the rarest token both share (common_maxidf, rare positive evidence)
+               names at contradicting addresses (na_conflict)
+  token idf  : (--token-idf, off by default) a Source 1 - IDF weighted view of the name tokens: the
+               rarest token present on one side only (xt_maxidf / xs_maxidf, "rare token conflict") and
+               the rarest token both share (common_maxidf). Measured on the 5 % subset: +0.0005 OOF macro
+               F0.5 but -0.0010 on the shifted labelled hold-out (the statistics are transductive and do
+               not transfer between corpora), so the group is not part of the default feature set.
 
 Output: <work>/<split>/pairs/part_XXXX.parquet (pid, t_rid, s_rid, features..., [label for train])
 """
@@ -386,20 +389,22 @@ def gather(rec, idx, prefix):
     return rec[idx].select(pl.all().name.prefix(prefix))
 
 
-def build(cand, rec, chunk, out_dir, truth=None):
+def build(cand, rec, chunk, out_dir, truth=None, token_idf=False):
     """Computes features chunk by chunk and writes <out_dir>/part_XXXX.parquet (float32 features)."""
     os.makedirs(out_dir, exist_ok=True)
     for f in os.listdir(out_dir):
         os.remove(os.path.join(out_dir, f))
     cand = cand.with_row_index("pid")
-    idf, idf_max = name_idf(rec)
+    idf, idf_max = name_idf(rec) if token_idf else (None, None)
     for i, (a, b) in enumerate(chunk_bounds(cand["t_rid"].to_numpy(), chunk)):
         c = cand.slice(a, b - a)
         t = gather(rec, c["t_rid"].to_numpy().astype(np.int64), "t_")
         s = gather(rec, c["s_rid"].to_numpy().astype(np.int64), "s_")
         df = pl.concat([t, s], how="horizontal")
-        f = pl.concat([c, string_features(df), set_features(df), record_features(df), python_features(df), idf_features(df, idf, idf_max)],
-                      how="horizontal")
+        blocks = [c, string_features(df), set_features(df), record_features(df), python_features(df)]
+        if token_idf:
+            blocks.append(idf_features(df, idf, idf_max))
+        f = pl.concat(blocks, how="horizontal")
         f = candidate_group_features(f)
         keep = {"pid", "t_rid", "s_rid"}
         f = f.with_columns(pl.col(x).cast(pl.Float32) for x in f.columns if x not in keep)
@@ -428,6 +433,7 @@ def main():
     ap.add_argument("--max-rank", type=int, default=None, help="experiments only: keep rank < this")
     ap.add_argument("--min-score", type=float, default=None, help="experiments only: keep score >= this")
     ap.add_argument("--chunk", type=int, default=2_000_000)
+    ap.add_argument("--token-idf", action="store_true", help="add the Source 1 IDF token features (see module docstring: hurts under corpus shift)")
     args = ap.parse_args()
     with Stage(args.work_dir, "features_" + args.split):
         run(args)
@@ -442,7 +448,7 @@ def run(args):
     truth = truth_pairs(rec, args.data_dir) if args.split == "train" else None
     global _POOL
     with mp.get_context("spawn").Pool(n_workers()) as _POOL:
-        build(cand, rec, args.chunk, os.path.join(d, "pairs"), truth)
+        build(cand, rec, args.chunk, os.path.join(d, "pairs"), truth, args.token_idf)
     log("done")
 
 
