@@ -14,3 +14,6 @@ work_*/
 out_*/
 logs_*/
 *.zip
+subset*/
+smoke/
+.pytest_cache/

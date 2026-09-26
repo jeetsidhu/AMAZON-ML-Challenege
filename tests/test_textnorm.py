@@ -186,7 +186,7 @@ def test_house_number_leading_zero_stripped():
 def test_normalize_record_contract():
     r = normalize_record("Acme Inc", "1 Main St, Springfield, IL", "US")
     for k in ("n_full", "n_core", "n_parts", "n_compact", "n_domain", "n_legal", "f_indic", "f_alias",
-              "a_norm", "a_comp", "a_num", "a_hn", "a_street", "a_key", "feat_name", "feat_addr", "feat_cross"):
+              "a_norm", "a_comp", "a_num", "a_hn", "a_street", "a_key", "feat_name", "feat_addr", "feat_cross", "feat_nchar"):
         assert k in r
 
 

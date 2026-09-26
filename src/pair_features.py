@@ -21,11 +21,20 @@ Features (all country-agnostic; the country label itself is never a feature):
   crowding   : how many Source 1 records share the Source 1 address / street; how many candidates of
                the Source 2/3 record share its exact address or its name
   extra toks : typo-tolerant count of name tokens present on one side only
+  channels   : rank of the pair in every retrieval channel (r_<channel>, -1 = not proposed), number of
+               channels that proposed it (n_ch), char-4-gram name cosine (cos_nchar) - from blocking.py
+  contradict : strong negative evidence: different house numbers on both sides (hn_conflict), different
+               unit / flat / suite numbers (unit_conflict), different postal-like codes (pc_conflict),
+               no digit group in common although both sides carry numbers (num_conflict), identical
+               names at contradicting addresses (na_conflict), and a Source 1 - IDF weighted view of the
+               name tokens: the rarest token present on one side only (xt_maxidf / xs_maxidf, "rare
+               token conflict") and the rarest token both share (common_maxidf, rare positive evidence)
 
 Output: <work>/<split>/pairs/part_XXXX.parquet (pid, t_rid, s_rid, features..., [label for train])
 """
 import multiprocessing as mp
 import os
+import re
 
 import numpy as np
 import polars as pl
@@ -37,6 +46,9 @@ from common import Stage, base_args, log, n_workers, read_tsv, split_dir
 REC_COLS = ["rid", "entity_id", "src", "country", "n_full", "n_core", "n_parts", "n_compact", "n_domain", "n_legal",
             "f_indic", "f_alias", "a_norm", "a_comp", "a_num", "a_hn", "a_street", "a_key"]
 _POOL = None
+# unit / flat / suite / shop numbers inside a normalised address component (textnorm canonical forms)
+UNIT_RE = re.compile(r"\b(?:unit|apt|ste|fl|flat|shop|room|rm|office|door|gala|lot|cabin)\s*(?:no\s*)?([a-z]?\d+[a-z]?)\b")
+PC_RE = re.compile(r"\b\d{5,6}\b")  # postal-like code: 5-6 digit group (US ZIP, Indian PIN, French code postal)
 
 
 def select_candidates(cand, max_rank=None, min_score=None):
@@ -171,12 +183,25 @@ def _tok_unmatched(xs, ys):
     return n
 
 
+def _conflict(xs, ys):
+    """1 when both sides carry values and share none, 0 when both carry values and share one, -1 otherwise."""
+    if not xs or not ys:
+        return -1.0
+    return 0.0 if set(xs) & set(ys) else 1.0
+
+
 def _py_features(args):
-    t_hn, s_hn, t_num, s_num, t_core, s_core = args
-    out = np.empty((len(t_hn), 8), dtype=np.float32)
+    t_hn, s_hn, t_num, s_num, t_core, s_core, t_comp, s_comp = args
+    out = np.empty((len(t_hn), 12), dtype=np.float32)
     for i in range(len(t_hn)):
         a, b = t_hn[i] or "", s_hn[i] or ""
         rel = _hn_relation(a, b)
+        # contradictions: house numbers that are neither equal nor a digit-corruption of each other
+        out[i, 8] = -1 if rel < 0 else (1.0 if rel == 5 else 0.0)
+        out[i, 9] = _conflict(UNIT_RE.findall(t_comp[i] or ""), UNIT_RE.findall(s_comp[i] or ""))
+        pt = [x for x in PC_RE.findall(t_num[i] or "") if x != a]
+        ps = [x for x in PC_RE.findall(s_num[i] or "") if x != b]
+        out[i, 10] = _conflict(pt, ps)
         if rel >= 0:
             x, y = int(a[:9]), int(b[:9])
             d = abs(x - y)
@@ -186,6 +211,7 @@ def _py_features(args):
             out[i, 1] = out[i, 2] = -1
         tn = (t_num[i] or "").split()
         sn = (s_num[i] or "").split()
+        out[i, 11] = _conflict(tn, sn)
         out[i, 0] = rel
         out[i, 3] = (b in tn) if b and tn else -1
         out[i, 4] = (a in sn) if a and sn else -1
@@ -197,11 +223,12 @@ def _py_features(args):
     return out
 
 
-PY_FEATS = ["hn_rel", "hn_logdiff", "hn_reldiff", "hn_s_in_t", "hn_t_in_s", "hn_lendiff", "nm_xt", "nm_xs"]
+PY_FEATS = ["hn_rel", "hn_logdiff", "hn_reldiff", "hn_s_in_t", "hn_t_in_s", "hn_lendiff", "nm_xt", "nm_xs",
+            "hn_conflict", "unit_conflict", "pc_conflict", "num_conflict"]
 
 
 def python_features(df, workers=None):
-    cols = [df[c].to_list() for c in ("t_a_hn", "s_a_hn", "t_a_num", "s_a_num", "t_n_core", "s_n_core")]
+    cols = [df[c].to_list() for c in ("t_a_hn", "s_a_hn", "t_a_num", "s_a_num", "t_n_core", "s_n_core", "t_a_comp", "s_a_comp")]
     n = df.height
     step = 50_000
     jobs = [tuple(c[a:a + step] for c in cols) for a in range(0, n, step)]
@@ -225,6 +252,35 @@ def python_features(df, workers=None):
         ((pl.col("lg_t") > 0) & (pl.col("lg_s") > 0) & (pl.col("lg_common") == 0)).cast(pl.Int8).alias("lg_conflict"),
     )
     return pl.concat([out, lg], how="horizontal")
+
+
+def name_idf(rec):
+    """Source 1 document frequency of every core-name token -> (token, idf) table. Computed from the
+    records of the split being processed (no labels): a token shared by two records is strong evidence
+    when few Source 1 records carry it, and a token present on one side only is a strong contradiction
+    when it is rare (a typo of a common token is rare too, which the typo-tolerant nm_xt/nm_xs cover)."""
+    s1 = rec.filter(pl.col("src") == 1)
+    n = max(s1.height, 1)
+    df = (s1.lazy().select(pl.col("n_core").fill_null("").str.split(" ").alias("t")).explode("t")
+          .filter(pl.col("t") != "").group_by("t").agg(pl.len().alias("df")).collect())
+    return df.select("t", np.log1p(n / pl.col("df")).cast(pl.Float32).alias("idf")), float(np.log1p(n))
+
+
+def idf_features(df, idf, idf_max):
+    """xt_maxidf / xs_maxidf: rarest name token present only on the Source 2/3 / Source 1 side;
+    common_maxidf: rarest shared token; *_sumidf: idf mass of the unmatched tokens. Unknown tokens
+    (absent from Source 1) get the maximum idf; -1 when there is no such token."""
+    tok = lambda c: pl.col(c).fill_null("").str.split(" ").list.eval(pl.element().filter(pl.element() != ""))  # noqa: E731
+    x = df.select(tok("t_n_core").alias("tn"), tok("s_n_core").alias("sn")).with_row_index("i").with_columns(
+        pl.col("tn").list.set_difference("sn").alias("xt"), pl.col("sn").list.set_difference("tn").alias("xs"),
+        pl.col("tn").list.set_intersection("sn").alias("cm"))
+    out = pl.DataFrame({"i": x["i"]})
+    for col, name in (("xt", "xt"), ("xs", "xs"), ("cm", "common")):
+        e = x.select("i", pl.col(col).alias("t")).explode("t").filter(pl.col("t").is_not_null()).join(idf, on="t", how="left").with_columns(
+            pl.col("idf").fill_null(idf_max))
+        agg = e.group_by("i").agg(pl.col("idf").max().alias(f"{name}_maxidf"), pl.col("idf").sum().alias(f"{name}_sumidf"))
+        out = out.join(agg, on="i", how="left")
+    return out.sort("i").drop("i").fill_null(-1.0)
 
 
 def set_features(df):
@@ -295,12 +351,17 @@ def address_crowding(rec):
 
 def candidate_group_features(f):
     """Per Source 2/3 record, over its candidate list: how many candidates share its exact
-    address, and how many carry the same name (namesakes)."""
+    address, how many carry the same name (namesakes), and how many carry the same name at a
+    contradicting address (t_n_namesake_contra). Plus the pair-level name/address contradiction:
+    (near-)identical names whose house numbers disagree outright and whose streets differ."""
     exact = ((pl.col("hn_rel") == 0) & (pl.col("st_eq") == 1)).cast(pl.Float32)
     same = ((pl.col("nm_xt") == 0) & (pl.col("nm_xs") == 0)).cast(pl.Float32)
+    contra = ((pl.col("nm_tset") >= 90) & (pl.col("hn_conflict") == 1) & (pl.col("st_eq") == 0)).cast(pl.Float32)
     return f.with_columns(
         exact.sum().over("t_rid").alias("t_n_addr_exact"),
         same.sum().over("t_rid").alias("t_n_namesake"),
+        contra.alias("na_conflict"),
+        (same * contra).sum().over("t_rid").alias("t_n_namesake_contra"),
     )
 
 
@@ -327,12 +388,13 @@ def build(cand, rec, chunk, out_dir, truth=None):
     for f in os.listdir(out_dir):
         os.remove(os.path.join(out_dir, f))
     cand = cand.with_row_index("pid")
+    idf, idf_max = name_idf(rec)
     for i, (a, b) in enumerate(chunk_bounds(cand["t_rid"].to_numpy(), chunk)):
         c = cand.slice(a, b - a)
         t = gather(rec, c["t_rid"].to_numpy().astype(np.int64), "t_")
         s = gather(rec, c["s_rid"].to_numpy().astype(np.int64), "s_")
         df = pl.concat([t, s], how="horizontal")
-        f = pl.concat([c, string_features(df), set_features(df), record_features(df), python_features(df)],
+        f = pl.concat([c, string_features(df), set_features(df), record_features(df), python_features(df), idf_features(df, idf, idf_max)],
                       how="horizontal")
         f = candidate_group_features(f)
         keep = {"pid", "t_rid", "s_rid"}

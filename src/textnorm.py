@@ -421,14 +421,31 @@ def norm_addr(raw, country=None):
     }
 
 
+NGRAM = 4
+
+
+def char_ngrams(s, n=NGRAM):
+    """Padded character n-grams of one compact string: "#dent", "dentd", ..., "iner#". A string
+    shorter than n gives the padded string itself, so very short names still get one feature."""
+    s = "#" + s + "#"
+    if len(s) <= n:
+        return [s]
+    return [s[i:i + n] for i in range(len(s) - n + 1)]
+
+
 def blocking_features(n, a):
-    """Space separated blocking features for one record.
+    """Space separated blocking features for one record (four blocks, each a retrieval channel):
 
     name block   : n:<core token>, p:<order-free token pair>, k:<compact-name prefix>
+    nchar block  : g:<char 4-gram of the compact core name / alias / domain stem> (typo- and
+                   transliteration-tolerant: "co1lege" still shares most grams with "college")
     address block: a:<token>, b:<adjacent bigram>, h:<house number>_<key token>
     cross block  : c:<name token>_<key address token>  (separates namesakes in different places)
     """
-    nf, af, cf = [], [], []
+    nf, af, cf, gf = [], [], [], []
+    for c in n["n_compact"].split("|"):
+        if c:
+            gf.extend("g:" + g for g in char_ngrams(c))
     for part in n["n_parts"].split("|"):
         toks = part.split()
         for t in toks:
@@ -454,15 +471,16 @@ def blocking_features(n, a):
     for t in n["n_core"].split()[:3]:
         for k in key:
             cf.append("c:" + t + "_" + k)
-    return " ".join(dict.fromkeys(nf)), " ".join(dict.fromkeys(af)), " ".join(dict.fromkeys(cf))
+    return " ".join(dict.fromkeys(nf)), " ".join(dict.fromkeys(af)), " ".join(dict.fromkeys(cf)), " ".join(dict.fromkeys(gf))
 
 
 def normalize_record(name, addr, country=None):
     n = norm_name(name, country)
     a = norm_addr(addr, country)
-    fn, fa, fc = blocking_features(n, a)
+    fn, fa, fc, fg = blocking_features(n, a)
     n.update(a)
     n["feat_name"] = fn
     n["feat_addr"] = fa
     n["feat_cross"] = fc
+    n["feat_nchar"] = fg
     return n

@@ -15,6 +15,13 @@ candidate pair is inside one fold.
   and the acceptance threshold is chosen on the calibrated scale by maximising macro F0.5
   over ALL training Source 1 entities (singletons included). The sweep is vectorised
   (thresholds.py) instead of re-sorting every pair per grid point.
+* Decision rule (thresholds.select_rule): besides the threshold, a margin over the record's
+  runner-up candidate and a threshold penalty for contradicted pairs are considered; the rule is
+  chosen by *nested* macro F0.5 (threshold fit on K-1 folds, scored on the held-out fold) and only
+  kept when it beats the plain threshold by --rule-min-gain. The report also carries the nested
+  macro F0.5 of the final rule, so the headline number is one the thresholds were not tuned on.
+* Reporting: macro F0.5, singleton false positives, false positives by kind, per-source
+  (Source 2 vs 3) and per-country metrics, and the candidate-generation audit of blocking.py.
 * Per-fold metrics, threshold stability across folds, calibration metrics and the
   cross-fold audit go to <work>/validation_report.json; OOF predictions to
   <work>/train/oof.parquet; final models (refit on all sampled rows) to <work>/stage*.txt.
@@ -36,12 +43,13 @@ import polars as pl
 import calibrate
 from checkpoint import Checkpoint, data_fingerprint
 from common import Stage, base_args, left_join_ordered, log, split_dir
-from model import house_numbers, iter_parts, part_files, stage1_features, stage2_context, to_np, train_lgb
+from model import CONTRA_COLS, contradiction_flag, house_numbers, iter_parts, part_files, stage1_features, stage2_context, to_np, train_lgb
 from pair_features import truth_pairs
 from threshold_policy import ThresholdPolicy
-from thresholds import best_threshold, default_grid, link_table, metrics_at, subset_links, sweep
+from thresholds import best_threshold, default_grid, link_table, metrics_at, nested_rule_f05, select_rule, subset_links, sweep
 
 TRAIN_ARGS = ("rounds1", "rounds2", "sample_rows", "seed", "drop_features", "no_stage2", "tag")
+NO_RULE = {"margin": 0.0, "contra_penalty": 0.0}
 
 
 def oof_predict(files, feats_fn, models, eval_fold, n):
@@ -77,20 +85,33 @@ def assign_folds(meta, rec):
     return meta
 
 
-def fold_report(links, nt, s_fold_of_s1, thr, grid):
+def fold_report(links, nt, s_fold_of_s1, thr, grid, rule=NO_RULE):
     """Per-fold macro F0.5 at the global threshold, plus each fold's own best threshold."""
     rows = []
     for k in np.unique(s_fold_of_s1):
         sel_s = s_fold_of_s1 == k
         lk, nt_k = subset_links(links, nt, sel_s)
-        at = metrics_at(lk, nt_k, thr)
-        own = best_threshold(sweep(lk, nt_k, grid))
+        at = metrics_at(lk, nt_k, thr, **rule)
+        own = best_threshold(sweep(lk, nt_k, grid, **rule))
         rows.append({"fold": int(k), "n_entities": int(sel_s.sum()), **{f"{a}_at_global_thr": b for a, b in at.items() if a != "threshold"},
                      "best_threshold": own["threshold"], "macro_f05_at_own_thr": own["macro_f05"]})
     f = np.array([r["macro_f05_at_global_thr"] for r in rows])
     t = np.array([r["best_threshold"] for r in rows])
     return {"folds": rows, "macro_f05_mean": float(f.mean()), "macro_f05_std": float(f.std(ddof=0)),
             "macro_f05_min": float(f.min()), "best_threshold_std": float(t.std(ddof=0)), "best_threshold_range": [float(t.min()), float(t.max())]}
+
+
+def per_source_report(links, nt, thr, rec, rule=NO_RULE):
+    """Link-level precision / recall and false positives per Source 2/3 record source (entity-level
+    macro F0.5 cannot be split by source: one entity receives records of both sources)."""
+    src = links.select("t_rid").join(rec.select(pl.col("rid").cast(pl.UInt32).alias("t_rid"), "src"), on="t_rid", how="left")["src"].to_numpy()
+    out = {}
+    for s in sorted(set(src.tolist())):
+        lm = src == s
+        r = metrics_at(links, nt, thr, link_mask=lm, **rule)
+        out[f"source{int(s)}"] = {k: r[k] for k in ("micro_precision", "micro_recall", "links", "fp_decoy", "fp_wrong_entity", "pair_accuracy")}
+        out[f"source{int(s)}"]["link_rows"] = int(lm.sum())
+    return out
 
 
 def main():
@@ -101,6 +122,8 @@ def main():
     ap.add_argument("--seed", type=int, default=2026)
     ap.add_argument("--drop-features", default="", help="comma separated feature names to exclude (ablations)")
     ap.add_argument("--no-stage2", action="store_true", help="ablation: use stage-1 probabilities directly")
+    ap.add_argument("--no-rule-search", action="store_true", help="plain threshold only (no margin / contradiction rule search)")
+    ap.add_argument("--rule-min-gain", type=float, default=1e-4, help="nested macro F0.5 gain a margin / contradiction rule needs")
     ap.add_argument("--tag", default="", help="suffix for the report / oof file names (ablations)")
     ap.add_argument("--checkpoint-name", default=None,
                     help="name of the checkpoint directory under <work>/checkpoints (default: ckpt_<timestamp>[_<tag>])")
@@ -152,10 +175,11 @@ def run(args):
     s1_rids = s1["rid"].to_numpy().astype(np.uint32)
     s1_fold = s1["fold"].to_numpy()
 
-    meta = pl.concat(list(iter_parts(files, ["pid", "t_rid", "s_rid", "label", "score"]))).sort("pid")
+    meta = pl.concat(list(iter_parts(files, ["pid", "t_rid", "s_rid", "label", "score", *CONTRA_COLS]))).sort("pid")
     n = meta.height
     assert meta["pid"][-1] == n - 1
-    meta = assign_folds(meta, rec)
+    contra = contradiction_flag(meta)
+    meta = assign_folds(meta, rec).drop(CONTRA_COLS)
     s_fold = meta["s_fold"].to_numpy()
     t_fold = meta["t_fold"].to_numpy()
     y_all = meta["label"].to_numpy()
@@ -198,8 +222,9 @@ def run(args):
         p1 = oof_predict(files, lambda df, pid: to_np(df, f1), m1s, s_fold, n)
         np.save(ckpt.path("oof_stage1.npy"), p1)
     ckpt.mark_stage("stage1")
-    links1, nt = link_table(meta, p1, truth, s1_rids)
-    log("stage-1 OOF", metrics_at(links1, nt, best_threshold(sweep(links1, nt, default_grid()))["threshold"]))
+    links1, nt = link_table(meta, p1, truth, s1_rids, contra)
+    s1_best = best_threshold(sweep(links1, nt, default_grid()))
+    log("stage-1 OOF", {k: s1_best[k] for k in ("threshold", "macro_f05", "micro_precision", "micro_recall")})
 
     # ---------------- stage 2 (OOF) on stage-1 OOF context
     if args.no_stage2:
@@ -224,11 +249,21 @@ def run(args):
     log(f"Platt a={cal['a']:.3f} b={cal['b']:.3f}; nested calibration: " +
         ", ".join(f"{k}: ll={v['log_loss']:.4f} brier={v['brier']:.5f} ece={v['ece']:.4f}" for k, v in cal_report.items()))
     grid = default_grid()
-    links, nt = link_table(meta, p2c, truth, s1_rids)
-    rows = sweep(links, nt, grid)
+    links, nt = link_table(meta, p2c, truth, s1_rids, contra)
+    # ---------------- decision rule (margin over the runner-up, contradiction penalty): nested selection
+    if args.no_rule_search:
+        rule_sel, rule_rows = dict(NO_RULE, nested_macro_f05=nested_rule_f05(links, nt, s1_fold, grid)[0]), []
+        rule_sel["nested_macro_f05_threshold_only"] = rule_sel["nested_macro_f05"]
+    else:
+        rule_sel, rule_rows = select_rule(links, nt, s1_fold, grid, min_gain=args.rule_min_gain)
+        log("decision rules (nested macro F0.5):", [(r["margin"], r["contra_penalty"], round(r["nested_macro_f05"], 5)) for r in rule_rows])
+    rule = {"margin": rule_sel["margin"], "contra_penalty": rule_sel["contra_penalty"]}
+    log(f"decision rule: {rule} (nested macro F0.5 {rule_sel['nested_macro_f05']:.5f} vs threshold-only {rule_sel['nested_macro_f05_threshold_only']:.5f})")
+    rows = sweep(links, nt, grid, **rule)
     best = best_threshold(rows)
-    log("stage-2 OOF best", best)
-    folds_rep = fold_report(links, nt, s1_fold, best["threshold"], grid)
+    best_plain = best_threshold(sweep(links, nt, grid)) if rule != NO_RULE else best
+    log("stage-2 OOF best", {k: best[k] for k in ("threshold", "macro_f05", "micro_precision", "micro_recall", "singleton_fp", "fp_decoy", "fp_wrong_entity")})
+    folds_rep = fold_report(links, nt, s1_fold, best["threshold"], grid, rule)
     log("per-fold macro F0.5 at global thr", [round(r["macro_f05_at_global_thr"], 4) for r in folds_rep["folds"]],
         "std", round(folds_rep["macro_f05_std"], 5), "fold-best thresholds", [r["best_threshold"] for r in folds_rep["folds"]])
     # metrics on the entities whose candidate lists are entirely within their fold (no cross-fold pair)
@@ -239,12 +274,13 @@ def run(args):
     audit = {"cross_fold_pair_share": float(cross.mean()), "entities_with_cross_fold_pair": float((~within_s).mean())}
     if within_s.any() and (~within_s).any():
         for name, sel in (("within_fold_only", within_s), ("with_cross_fold_pairs", ~within_s)):
-            audit[name] = metrics_at(*subset_links(links, nt, sel), best["threshold"])
-    # per-country
+            audit[name] = metrics_at(*subset_links(links, nt, sel), best["threshold"], **rule)
+    # per-country (entity level) and per-source (link level)
     country = s1["country"].fill_null("").to_numpy()
     per_country = {}
     for c in sorted(set(country.tolist())):
-        per_country[c] = metrics_at(*subset_links(links, nt, country == c), best["threshold"])
+        per_country[c] = metrics_at(*subset_links(links, nt, country == c), best["threshold"], **rule)
+    per_source = per_source_report(links, nt, best["threshold"], rec, rule)
     # pair-level metrics: why "accuracy" looks great while F0.5 does not
     pred_pos = p2c >= best["threshold"]
     pair = {"accuracy": float((pred_pos == (y_all == 1)).mean()), "positive_rate": float(y_all.mean()),
@@ -260,21 +296,25 @@ def run(args):
         "n_pairs": int(n), "n_positive_pairs": int(y_all.sum()), "n_s1": int(len(s1_rids)), "folds": fold_ids,
         "stage1_features": len(f1), "dropped_features": sorted(drop), "stage2": not args.no_stage2,
         "threshold": best["threshold"], "oof_at_threshold": best, "threshold_sweep": rows,
-        "per_fold": folds_rep, "per_country": per_country, "pair_level": pair,
+        "decision_rule": {**rule_sel, "candidates": rule_rows, "oof_at_threshold_only": best_plain},
+        "stage1_oof_at_threshold": s1_best,
+        "per_fold": folds_rep, "per_country": per_country, "per_source": per_source, "pair_level": pair,
         "calibration": {"platt": cal, "nested": cal_report}, "leakage_audit": audit,
-        "blocking_recall": blocking_recall,
+        "blocking_recall": blocking_recall, "candidate_audit": blocking_recall,
     }
     tag = f"_{args.tag}" if args.tag else ""
     with open(ckpt.path("validation_report.json"), "w") as fh:
         json.dump(report, fh, indent=1)
     meta.select("pid", "t_rid", "s_rid", "label", "s_fold", "t_fold").with_columns(
-        pl.Series("p1", p1), pl.Series("p2", p2), pl.Series("p2_cal", p2c)).write_parquet(ckpt.path("oof.parquet"))
+        pl.Series("p1", p1), pl.Series("p2", p2), pl.Series("p2_cal", p2c), pl.Series("contra", contra)).write_parquet(ckpt.path("oof.parquet"))
     calibrate.save(cal, ckpt.path("calibration.json"))
-    # the OOF-optimal global threshold as a policy file: the baseline every per-class policy is compared with
+    # the OOF-optimal global threshold (+ the selected decision rule) as a policy file: the baseline every
+    # per-class policy is compared with
     ThresholdPolicy(best["threshold"], name="global_train", fit={"source": "train.py OOF sweep", "objective": "macro_f05",
-                    "oof_macro_f05": best["macro_f05"]}).save(ckpt.path(os.path.join("thresholds", "global_train.json")))
-    ckpt.update_manifest(oof_macro_f05=best["macro_f05"], global_threshold=best["threshold"], n_pairs=int(n), n_s1=int(len(s1_rids)),
-                         folds=fold_ids, calibration=cal, stage2=not args.no_stage2)
+                    "oof_macro_f05": best["macro_f05"], "nested_macro_f05": rule_sel["nested_macro_f05"]}, **rule).save(
+        ckpt.path(os.path.join("thresholds", "global_train.json")))
+    ckpt.update_manifest(oof_macro_f05=best["macro_f05"], nested_macro_f05=rule_sel["nested_macro_f05"], global_threshold=best["threshold"],
+                         decision=rule, n_pairs=int(n), n_s1=int(len(s1_rids)), folds=fold_ids, calibration=cal, stage2=not args.no_stage2)
     ckpt.mark_stage("oof")
     if args.tag:
         # ablation run: report + OOF only (no final models); keep the legacy tagged copies at the top level
@@ -293,8 +333,8 @@ def run(args):
         imp = sorted(zip(f1, m1.feature_importance("gain")), key=lambda x: -x[1])
     with open(ckpt.path("model_meta.json"), "w") as fh:
         json.dump({"checkpoint": ckpt.name, "f1": f1, "f2": f2, "stage2": not args.no_stage2, "threshold": best["threshold"],
-                   "threshold_scale": "calibrated", "oof_macro_f05": best["macro_f05"],
-                   "feature_importance_gain": [(nm, float(g)) for nm, g in imp]}, fh, indent=1)
+                   "threshold_scale": "calibrated", "oof_macro_f05": best["macro_f05"], "nested_macro_f05": rule_sel["nested_macro_f05"],
+                   "decision": rule, "feature_importance_gain": [(nm, float(g)) for nm, g in imp]}, fh, indent=1)
     ckpt.mark_stage("final")
     ckpt.set_latest()
     log(f"checkpoint {ckpt.dir} complete; <work>/ files now point at it")

@@ -67,12 +67,17 @@ def main():
     r = args.ratio if args.ratio is not None else r
     log(f"true matches/S1 (train) {m:.3f}; decoys/S1 train {dec_tr:.3f} test {dec_te:.3f}; ratio r={r:.3f}")
 
-    oof = pl.read_parquet(os.path.join(dtr, "oof.parquet"), columns=["t_rid", "s_rid", "label", "p2_cal"])
+    oof = pl.read_parquet(os.path.join(dtr, "oof.parquet"))
+    contra = oof["contra"].to_numpy() if "contra" in oof.columns else None
     s1_rids = rec.filter(pl.col("src") == 1)["rid"].to_numpy().astype(np.uint32)
-    links, nt = link_table(oof.select("t_rid", "s_rid"), oof["p2_cal"].to_numpy(), truth, s1_rids)
+    links, nt = link_table(oof.select("t_rid", "s_rid"), oof["p2_cal"].to_numpy(), truth, s1_rids, contra)
     grid = default_grid()
-    plain = sweep(links, nt, grid)
-    density = sweep(links, nt, grid, decoy_weight=r)
+    meta_path = os.path.join(args.work_dir, "model_meta.json")
+    with open(meta_path) as f:
+        meta = json.load(f)
+    rule = dict(meta.get("decision") or {"margin": 0.0, "contra_penalty": 0.0})  # decision rule selected by train.py
+    plain = sweep(links, nt, grid, **rule)
+    density = sweep(links, nt, grid, decoy_weight=r, **rule)
     # prior shift: positive pairs / negative pairs among the candidates. Under the density model
     # the negatives grow by the decoy share; the odds ratio is (neg_train / neg_test_expected).
     y = oof["label"].to_numpy()
@@ -85,7 +90,7 @@ def main():
     odds_ratio = (n_pos / neg_te) / (n_pos / n_neg)
     shifted = calibrate.shift_odds(links["p"].to_numpy(), odds_ratio)
     links_shift = links.with_columns(pl.Series("p", shifted))
-    prior_rows = sweep(links_shift, nt, grid, decoy_weight=r)
+    prior_rows = sweep(links_shift, nt, grid, decoy_weight=r, **rule)
     thr_train = best_threshold(plain)["threshold"]
     prior_equiv = float(calibrate.sigmoid(calibrate.logit(thr_train) - np.log(odds_ratio)))  # same rule on the unshifted scale
     choice = {"train": thr_train, "density": best_threshold(density)["threshold"], "prior": round(prior_equiv, 4)}
@@ -93,8 +98,9 @@ def main():
     analysis = {
         "decoy_ratio": r, "odds_ratio_prior_shift": odds_ratio, "chosen_method": args.method, "threshold": thr,
         "candidates": choice,
-        "oof_plain_at": {k: metrics_at(links, nt, v) for k, v in choice.items()},
-        "oof_density_adjusted_at": {k: metrics_at(links, nt, v, decoy_weight=r) for k, v in choice.items()},
+        "decision_rule": rule,
+        "oof_plain_at": {k: metrics_at(links, nt, v, **rule) for k, v in choice.items()},
+        "oof_density_adjusted_at": {k: metrics_at(links, nt, v, decoy_weight=r, **rule) for k, v in choice.items()},
         "sweep_plain": plain, "sweep_density": density, "sweep_prior_shifted": prior_rows,
     }
     for k, v in choice.items():
@@ -102,9 +108,6 @@ def main():
             f"density-adjusted={analysis['oof_density_adjusted_at'][k]['macro_f05']:.5f}")
     with open(os.path.join(args.work_dir, "threshold_analysis.json"), "w") as f:
         json.dump(analysis, f, indent=1)
-    meta_path = os.path.join(args.work_dir, "model_meta.json")
-    with open(meta_path) as f:
-        meta = json.load(f)
     meta.update({"threshold": thr, "threshold_method": args.method, "decoy_ratio": r, "threshold_candidates": choice,
                  "oof_macro_f05_at_threshold": analysis["oof_plain_at"][args.method]["macro_f05"],
                  "adjusted_macro_f05_at_threshold": analysis["oof_density_adjusted_at"][args.method]["macro_f05"]})
@@ -115,7 +118,7 @@ def main():
         # every candidate as a policy file, so tune_thresholds.py / policy_holdout_eval.py can compare them
         for k, v in choice.items():
             ThresholdPolicy(v, name=f"global_{k}", fit={"source": "select_threshold.py", "method": k, "decoy_ratio": r,
-                            "oof_macro_f05": analysis["oof_plain_at"][k]["macro_f05"]}).save(ckpt.path(os.path.join("thresholds", f"global_{k}.json")))
+                            "oof_macro_f05": analysis["oof_plain_at"][k]["macro_f05"]}, **rule).save(ckpt.path(os.path.join("thresholds", f"global_{k}.json")))
     log(f"selected threshold {thr} ({args.method})")
 
 

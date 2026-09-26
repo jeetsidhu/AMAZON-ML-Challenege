@@ -30,6 +30,9 @@ GROUPS = {
     "legal_form": lambda c: c.startswith("lg_"),
     "record_flags": lambda c: c in {"t_src", "t_indic", "t_alias", "t_noaddr", "s_noaddr", "t_noname", "t_nlen", "s_nlen"},
     "crowding": lambda c: c in {"s_addr_mult", "s_street_mult"},
+    "channels": lambda c: c.startswith("r_") or c in {"n_ch", "cos_nchar"},
+    "contradiction": lambda c: c in {"hn_conflict", "unit_conflict", "pc_conflict", "num_conflict", "na_conflict", "t_n_namesake_contra"},
+    "token_idf": lambda c: c.endswith(("_maxidf", "_sumidf")),
 }
 
 

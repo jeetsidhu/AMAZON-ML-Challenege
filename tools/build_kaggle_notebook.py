@@ -18,7 +18,9 @@ FILES = ["src/common.py", "src/textnorm.py", "src/phonetic.py", "src/metrics.py"
          "src/checkpoint.py", "src/threshold_policy.py", "src/train.py", "src/leakage_check.py", "src/select_threshold.py",
          "src/tune_thresholds.py", "src/decode.py", "src/predict.py", "src/evaluate.py", "src/validate_submission.py",
          "tools/make_subset.py", "tools/summarize_reports.py", "tools/policy_holdout_eval.py",
-         "tests/test_textnorm.py", "tests/test_calibrate.py", "tests/test_threshold_policy.py", "tests/test_checkpoint.py"]
+         "tools/error_analysis.py",
+         "tests/test_textnorm.py", "tests/test_calibrate.py", "tests/test_threshold_policy.py", "tests/test_checkpoint.py",
+         "tests/test_decision.py", "tests/test_blocking.py"]
 
 cells = []
 md = lambda s: cells.append(nbf.v4.new_markdown_cell(s))  # noqa: E731
@@ -44,6 +46,7 @@ ROUNDS1, ROUNDS2 = 150, 100 # LightGBM boosting rounds (stage 1 / stage 2); 300 
 DATASET_ROOT = "/kaggle/input"   # searched recursively for train_source1.tsv etc.
 CKPT_NAME = "kaggle_full"        # training checkpoint name (<work>/checkpoints/<name>; re-running resumes it)
 THRESHOLD_ARGS = ["--density", "global", "--select", "auto"]   # tune_thresholds.py: e.g. ["--select", "country"] to force per-country thresholds
+CHANNELS = None                  # blocking.py --channels, e.g. "combined=5,nchar=3,addr=2,rev=2"; None = the default of blocking.py
 
 import os, sys, subprocess, time, json, shutil, glob
 ER = "/kaggle/working/er"
@@ -130,6 +133,7 @@ code('''if not SKIP_SMOKE:
     run_step("smoke_07_leakage_check", ["src/leakage_check.py", "--data-dir", SD, "--work-dir", SW, "--canary-rows", "50000", "--canary-rounds", "10"])
     run_step("smoke_08_select_threshold", ["src/select_threshold.py", "--data-dir", SD, "--work-dir", SW])
     run_step("smoke_08b_tune_thresholds", ["src/tune_thresholds.py", "--data-dir", SD, "--work-dir", SW, "--min-support", "20"])
+    run_step("smoke_08c_error_analysis", ["tools/error_analysis.py", "--data-dir", SD, "--work-dir", SW])
     run_step("smoke_09_predict", ["src/predict.py", "--data-dir", SD, "--work-dir", SW, "--out-dir", SO])
     run_step("smoke_10_validate", ["src/validate_submission.py", "--matching", f"{SO}/matching_results.tsv", "--candidate", f"{SO}/candidate_pairs.tsv", "--test-dir", f"{SD}/test"])
     run_step("smoke_11_evaluate", ["src/evaluate.py", "--pred", f"{SO}/matching_results.tsv", "--truth", f"{SD}/test/subset_ground_truth.tsv", "--out", f"{SW}/smoke_eval.json"])
@@ -145,7 +149,7 @@ code('''if not SMOKE_ONLY:
     run_step("02_lexicon", ["src/build_lexicon.py", "--data-dir", DATA, "--work-dir", WORK])
     for sp in ("train", "test"):
         run_step(f"03_prepare_{sp}", ["src/prepare.py", "--data-dir", DATA, "--work-dir", WORK, "--split", sp])
-        run_step(f"04_blocking_{sp}", ["src/blocking.py", "--data-dir", DATA, "--work-dir", WORK, "--split", sp])
+        run_step(f"04_blocking_{sp}", ["src/blocking.py", "--data-dir", DATA, "--work-dir", WORK, "--split", sp] + (["--channels", CHANNELS] if CHANNELS else []))
         run_step(f"05_features_{sp}", ["src/pair_features.py", "--data-dir", DATA, "--work-dir", WORK, "--split", sp])
     run_step("06_train", ["src/train.py", "--data-dir", DATA, "--work-dir", WORK, "--rounds1", str(ROUNDS1), "--rounds2", str(ROUNDS2),
                           "--checkpoint-name", CKPT_NAME, "--resume"])
@@ -153,12 +157,13 @@ code('''if not SMOKE_ONLY:
     run_step("08_select_threshold", ["src/select_threshold.py", "--data-dir", DATA, "--work-dir", WORK])
     # global vs per-class thresholds on the checkpoint's OOF predictions; writes the selected policy (THRESHOLD_ARGS above)
     run_step("08b_tune_thresholds", ["src/tune_thresholds.py", "--data-dir", DATA, "--work-dir", WORK] + THRESHOLD_ARGS)
+    run_step("08c_error_analysis", ["tools/error_analysis.py", "--data-dir", DATA, "--work-dir", WORK])   # entity-level error report -> work/error_analysis.json
     run_step("09_predict", ["src/predict.py", "--data-dir", DATA, "--work-dir", WORK, "--out-dir", OUT])
     run_step("10_validate", ["src/validate_submission.py", "--matching", f"{OUT}/matching_results.tsv", "--candidate", f"{OUT}/candidate_pairs.tsv", "--test-dir", f"{DATA}/test"])''')
 
 md("## Results")
 code('''if not SMOKE_ONLY:
-    for f in glob.glob(f"{WORK}/*.json") + glob.glob(f"{WORK}/*.md") + glob.glob(f"{WORK}/train/*.json") + [f"{WORK}/stage1.txt", f"{WORK}/stage2.txt", f"{WORK}/lexicon.json"]:
+    for f in glob.glob(f"{WORK}/*.json") + glob.glob(f"{WORK}/*.md") + glob.glob(f"{WORK}/train/*.json") + [f"{WORK}/stage1.txt", f"{WORK}/stage2.txt", f"{WORK}/lexicon.json", f"{LOGS}/08c_error_analysis.log"]:
         if os.path.exists(f):
             shutil.copy(f, DIAG)
     # the checkpoint without its bulky OOF / fold models: manifest, models, calibration, every threshold policy, experiment log

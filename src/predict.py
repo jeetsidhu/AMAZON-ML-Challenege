@@ -26,7 +26,7 @@ import calibrate
 from checkpoint import Checkpoint
 from common import Stage, base_args, left_join_ordered, log, split_dir
 from decode import decode
-from model import assign, house_numbers, iter_parts, part_files, stage2_context, to_np
+from model import CONTRA_COLS, assign, best_candidates, contradiction_flag, house_numbers, iter_parts, part_files, stage2_context, to_np
 from threshold_policy import ThresholdPolicy, class_keys, record_columns
 
 
@@ -71,7 +71,8 @@ def resolve_model(work_dir, checkpoint):
 
 def resolve_policy(args, ckpt, meta_json):
     if args.threshold is not None:
-        return ThresholdPolicy(args.threshold, name=f"cli_{args.threshold}", scale=meta_json.get("threshold_scale", "calibrated"))
+        return ThresholdPolicy(args.threshold, name=f"cli_{args.threshold}", scale=meta_json.get("threshold_scale", "calibrated"),
+                               **meta_json.get("decision", {}))
     if args.policy:
         if not os.path.exists(args.policy):
             raise SystemExit(f"policy file {args.policy} not found")
@@ -110,7 +111,9 @@ def run(args):
         raise SystemExit(f"policy scale {policy.scale} does not match the model's {meta_json.get('threshold_scale')}")
     ckpt_name = ckpt.name if ckpt else "legacy"
     files = part_files(d)
-    meta = pl.concat(list(iter_parts(files, ["pid", "t_rid", "s_rid"]))).sort("pid")
+    meta = pl.concat(list(iter_parts(files, ["pid", "t_rid", "s_rid", *CONTRA_COLS]))).sort("pid")
+    contra = contradiction_flag(meta)
+    meta = meta.drop(CONTRA_COLS)
     n = meta.height
     log(f"test pairs {n}; checkpoint {ckpt_name}; {policy.describe()}")
 
@@ -137,7 +140,7 @@ def run(args):
     if decoder == "expected_f":
         links = decode(meta, p2)
     else:
-        links = assign(meta, p2, thr_rows)
+        links = assign(meta, p2, thr_rows, policy.margin, policy.contra_penalty, contra)
     seen = set(policy.thresholds)
     unseen = sorted(set(keys.tolist()) - seen) if policy.thresholds else []
     if unseen:
@@ -161,14 +164,26 @@ def run(args):
     log(f"wrote {m.height} rows; {(m['matched_entity_ids'] != '').sum()} Source 1 entities matched; "
         f"{(c['candidate_entity_ids'] != '').sum()} with candidates")
     per_class = {}
-    if policy.class_by:
-        kk = pl.DataFrame({"key": keys.astype(str), "thr": thr_rows}).with_row_index("i")
-        best = meta.with_row_index("i").with_columns(pl.Series("p", p2)).sort("p", descending=True).unique("t_rid", keep="first").join(kk, on="i")
-        agg = best.group_by("key").agg(pl.len().alias("records"), (pl.col("p") >= pl.col("thr")).sum().alias("links"), pl.col("thr").first())
-        per_class = {r["key"]: {"records": int(r["records"]), "links": int(r["links"]), "threshold": float(r["thr"])} for r in agg.iter_rows(named=True)}
+    best = best_candidates(meta, p2, contra)
+    rejected = {"records_with_candidates": int(best.height), "linked": int(links.height)}
+    if decoder != "expected_f":
+        thr_best = thr_rows[best["i"].to_numpy()]
+        pb = best["p"].to_numpy()
+        above = pb >= thr_best
+        rejected.update({"below_threshold": int((~above).sum()),
+                         "rejected_by_margin": int((above & (pb - best["p2nd"].to_numpy() < policy.margin)).sum()),
+                         "rejected_by_contradiction": int((above & (pb - best["p2nd"].to_numpy() >= policy.margin)
+                                                           & best["contra"].to_numpy() & (pb < thr_best + policy.contra_penalty)).sum())
+                         if policy.contra_penalty > 0 else 0})
+        if policy.class_by:
+            kk = pl.DataFrame({"key": keys.astype(str)}).with_row_index("i")
+            agg = best.join(kk, on="i").with_columns(pl.Series("thr", thr_best), pl.Series("ok", above)).group_by("key").agg(
+                pl.len().alias("records"), pl.col("ok").sum().alias("above_threshold"), pl.col("thr").first())
+            per_class = {r["key"]: {"records": int(r["records"]), "above_threshold": int(r["above_threshold"]), "threshold": float(r["thr"])} for r in agg.iter_rows(named=True)}
+    log(f"rejection: {rejected}")
     info = {"checkpoint": ckpt_name, "checkpoint_dir": ckpt.dir if ckpt else None, "policy": policy.to_dict(), "decoder": decoder,
             "test_pairs": int(n), "links": int(links.height), "entities_matched": int((m["matched_entity_ids"] != "").sum()),
-            "unseen_classes": unseen, "per_class": per_class, "out_dir": os.path.abspath(args.out_dir)}
+            "unseen_classes": unseen, "per_class": per_class, "rejection": rejected, "out_dir": os.path.abspath(args.out_dir)}
     with open(os.path.join(args.out_dir, "prediction_meta.json"), "w") as f:
         json.dump(info, f, indent=1)
     if ckpt:

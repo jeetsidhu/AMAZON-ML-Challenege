@@ -31,14 +31,31 @@ def main():
         print(f"pairs {rep['n_pairs']}, positive pairs {rep['n_positive_pairs']}, Source 1 entities {rep['n_s1']}, "
               f"stage-1 features {rep['stage1_features']}, folds {rep['folds']}\n")
         print("| metric | value |\n|---|---|")
-        for k in ("threshold", "macro_f05", "micro_precision", "micro_recall", "singleton_acc", "links"):
-            print(f"| {k} | {fmt(at[k])} |")
+        for k in ("threshold", "macro_f05", "micro_precision", "micro_recall", "singleton_acc", "singleton_fp", "fp_decoy", "fp_wrong_entity", "links"):
+            if k in at:
+                print(f"| {k} | {fmt(at[k])} |")
+        dr = rep.get("decision_rule")
+        if dr:
+            print(f"| decision rule | margin {dr['margin']:.2f}, contradiction penalty {dr['contra_penalty']:.2f} |")
+            print(f"| nested macro F0.5 (threshold fit on K-1 folds) | {fmt(dr['nested_macro_f05'])} (threshold-only rule: {fmt(dr['nested_macro_f05_threshold_only'])}) |")
         pl_ = rep["pair_level"]
         print(f"| pair-level accuracy | {fmt(pl_['accuracy'])} |\n| pair-level positive rate | {fmt(pl_['positive_rate'])} |"
               f"\n| pair-level precision | {fmt(pl_['precision'])} |\n| pair-level recall | {fmt(pl_['recall'])} |")
-        if rep.get("blocking_recall"):
-            r = rep["blocking_recall"]["recall_at_k"]
+        ca = rep.get("candidate_audit") or rep.get("blocking_recall")
+        if ca and ca.get("recall_at_k"):
+            r = ca["recall_at_k"]
             print("| retrieval recall@1 / @3 / @5 / @10 | " + " / ".join(fmt(r[str(k)], 4) for k in (1, 3, 5, 10) if str(k) in r) + " |")
+        if ca and "pair_recall" in ca:
+            print(f"| candidate pair recall / complete-entity coverage / oracle macro F0.5 | {fmt(ca['pair_recall'], 4)} / {fmt(ca['entity_complete_coverage'], 4)} / {fmt(ca['oracle_macro_f05'], 4)} |")
+            print(f"| candidates per record / channels | {fmt(ca['candidates_per_record'], 2)} / {ca['channels']} |")
+            if ca.get("misses"):
+                m = ca["misses"]
+                print(f"| missed true pairs: ambiguous (address-less namesake) / recoverable | {m['missed_ambiguous']} / {m['missed_recoverable']} (recall on recoverable {fmt(m['recall_on_recoverable'], 4)}) |")
+        if rep.get("per_source"):
+            print("\n### Per source (link level)\n")
+            print("| source | link rows | links | precision | recall | FP decoy | FP wrong entity |\n|---|---|---|---|---|---|---|")
+            for k, v in rep["per_source"].items():
+                print(f"| {k} | {v['link_rows']} | {v['links']} | {fmt(v['micro_precision'])} | {fmt(v['micro_recall'])} | {v['fp_decoy']} | {v['fp_wrong_entity']} |")
         print("\n### Per fold (at the global threshold)\n")
         print("| fold | entities | macro F0.5 | precision | recall | singleton acc | own best thr | F0.5 @ own thr |\n|---|---|---|---|---|---|---|---|")
         for r in rep["per_fold"]["folds"]:
@@ -48,9 +65,9 @@ def main():
         print(f"\nmean {fmt(pf['macro_f05_mean'])}, std {fmt(pf['macro_f05_std'])}, min {fmt(pf['macro_f05_min'])}; "
               f"fold-optimal thresholds {pf['best_threshold_range']} (std {fmt(pf['best_threshold_std'], 4)})\n")
         print("### Per country\n")
-        print("| country | entities-with-links | macro F0.5 | precision | recall |\n|---|---|---|---|---|")
+        print("| country | entities | links | macro F0.5 | precision | recall | singleton FP |\n|---|---|---|---|---|---|---|")
         for c, r in rep["per_country"].items():
-            print(f"| {c or '(none)'} | {r['links']} | {fmt(r['macro_f05'])} | {fmt(r['micro_precision'])} | {fmt(r['micro_recall'])} |")
+            print(f"| {c or '(none)'} | {r['n_entities']} | {r['links']} | {fmt(r['macro_f05'])} | {fmt(r['micro_precision'])} | {fmt(r['micro_recall'])} | {r.get('singleton_fp', '-')} |")
         print("\n### Calibration (nested: fit on K-1 folds, scored on the held-out fold)\n")
         print("| probabilities | log loss | Brier | ECE |\n|---|---|---|---|")
         for k, v in rep["calibration"]["nested"].items():
@@ -124,6 +141,16 @@ def main():
             print(f"| {name}{' (LATEST)' if name == latest else ''} | {m.get('created')} | {m.get('git_commit')} | {','.join(m.get('stages_done', []))} | "
                   f"{ta.get('rounds1')}/{ta.get('rounds2')} | {fmt(m.get('oof_macro_f05')) if m.get('oof_macro_f05') is not None else '-'} | "
                   f"{m.get('global_threshold', '-')} | {', '.join(pols)} |")
+    ea = load(os.path.join(w, "error_analysis.json"))
+    if ea and "categories" in ea:
+        print("\n## Entity-level error analysis (OOF, selected policy; tools/error_analysis.py)\n")
+        print(f"macro F0.5 {fmt(ea['macro_f05'])}; points lost {fmt(ea['total_points_lost'])}; missing multiple matches: {ea['missing_multi']['entities']} entities "
+              f"({fmt(ea['missing_multi']['points_lost'])} points)\n")
+        print("| category (fix priority) | entities | macro F0.5 points lost | share of loss | no address | S1 namesakes |\n|---|---|---|---|---|---|")
+        for c in ea["priority"]:
+            v = ea["categories"][c]
+            print(f"| {c} | {v['entities']} | {fmt(v['macro_f05_points_lost'])} | {v['share_of_total_loss']:.3f} | {fmt(v['records']['no_address'], 3) if v['records']['no_address'] is not None else '-'} | "
+                  f"{fmt(v['records']['s1_has_namesakes'], 3) if v['records']['s1_has_namesakes'] is not None else '-'} |")
     prof = load(os.path.join(w, "profile.json"))
     if prof:
         print("\n## Runtime profile\n")

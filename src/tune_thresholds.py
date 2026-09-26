@@ -171,10 +171,13 @@ def run(args):
     s1_rids = s1["rid"].to_numpy().astype(np.uint32)
     s1_fold = s1["fold"].to_numpy()
     oof_path = ckpt.path("oof.parquet") if ckpt.has("oof.parquet") else os.path.join(dtr, "oof.parquet")
-    oof = pl.read_parquet(oof_path, columns=["t_rid", "s_rid", "label", "p2_cal"])
-    links, nt = link_table(oof.select("t_rid", "s_rid"), oof["p2_cal"].to_numpy(), truth, s1_rids)
+    oof = pl.read_parquet(oof_path)
+    contra = oof["contra"].to_numpy() if "contra" in oof.columns else None
+    links, nt = link_table(oof.select("t_rid", "s_rid"), oof["p2_cal"].to_numpy(), truth, s1_rids, contra)
     grid = default_grid()
-    log(f"checkpoint {ckpt.name}: {links.height} link rows, {len(nt)} entities, {len(configs)} configurations")
+    # the decision rule (margin / contradiction penalty) selected by train.py is kept by every policy
+    rule = dict(ckpt.manifest().get("decision") or {"margin": 0.0, "contra_penalty": 0.0})
+    log(f"checkpoint {ckpt.name}: {links.height} link rows, {len(nt)} entities, {len(configs)} configurations; decision rule {rule}")
 
     # decoy-density adjustment from record counts only
     src_tr, src_te = source_counts(args.work_dir)
@@ -192,8 +195,8 @@ def run(args):
 
     # class keys of every link row (its Source 1 side and Source 2/3 side) and of every S1 entity
     link_pairs = links.select("t_rid", "s_rid")
-    g_all = fit_global(links, nt, grid, r_global)
-    g_train = fit_global(links, nt, grid, 1.0)
+    g_all = fit_global(links, nt, grid, r_global, **rule)
+    g_train = fit_global(links, nt, grid, 1.0, **rule)
     log(f"global threshold: train-optimal {g_train:.2f}, density-adjusted {g_all:.2f}")
     results, policies, nested_cfgs, keys_by_cfg, dw_by_cfg = {}, {}, {}, {}, {}
     for cfg in configs:
@@ -208,10 +211,10 @@ def run(args):
         fit_kw = {k: cfg[k] for k in ("objective", "beta", "floor", "passes", "unseen", "class_objectives") if k in cfg}
         fit_kw.setdefault("unseen", args.unseen)
         pol, rep = fit_policy(links, nt, keys, class_by, grid, dw, min_support=cfg.get("min_support", args.min_support),
-                              name=name, global_threshold=g_all, entity_keys=entity_keys, **fit_kw)
+                              name=name, global_threshold=g_all, entity_keys=entity_keys, **rule, **fit_kw)
         pol.fit.update({"checkpoint": ckpt.name, "density": args.density, "decoy_ratio_global": r_global, "decoy_ratios": ratios,
                         "global_threshold_train_optimal": g_train})
-        rep["at_train_optimal_global"] = metrics_at(links, nt, g_train, dw)
+        rep["at_train_optimal_global"] = metrics_at(links, nt, g_train, dw, **rule)
         policies[name] = pol
         keys_by_cfg[name], dw_by_cfg[name] = keys, dw
         results[name] = {"policy": pol.to_dict(), "n_classes": len(pol.thresholds), "in_sample": rep, "decoy_ratios": ratios, "decoy_ratio_detail": ratio_detail}
@@ -227,14 +230,14 @@ def run(args):
         cb = parse_class_by(cfg.get("class_by", []))
         if cb and all(ATTRS[a].side != "t" for a in cb):
             ek = class_keys(pl.DataFrame({"t_rid": s1_rids, "s_rid": s1_rids}), rec, cb)
-        nc = nested_comparison(links, nt, keys_by_cfg[name], s1_fold, {name: cfg}, grid, dw_by_cfg[name], entity_keys=ek)
+        nc = nested_comparison(links, nt, keys_by_cfg[name], s1_fold, {name: cfg}, grid, dw_by_cfg[name], entity_keys=ek, **rule)
         results[name]["nested"] = nc[name]
         if "nested" not in results["global"]:
             results["global"]["nested"] = nc["global"]
         log(f"nested: {name} {nc[name]['nested_macro_f05']:.5f} vs global {nc['global']['nested_macro_f05']:.5f} "
             f"({nc[name]['gain_vs_global']:+.5f}, better in {nc[name]['folds_better_than_global']}/{len(nc[name]['per_fold'])} folds)")
     if "nested" not in results["global"]:
-        results["global"]["nested"] = nested_comparison(links, nt, keys_by_cfg["global"], s1_fold, {}, grid, dw_by_cfg["global"])["global"]
+        results["global"]["nested"] = nested_comparison(links, nt, keys_by_cfg["global"], s1_fold, {}, grid, dw_by_cfg["global"], **rule)["global"]
 
     # selection
     if args.select == "auto":
@@ -256,7 +259,7 @@ def run(args):
     if not args.tag and latest is not None and latest.name == ckpt.name:
         ckpt.set_latest()  # refreshes <work>/threshold_policy.json
     out = {"checkpoint": ckpt.name, "checkpoint_dir": ckpt.dir, "n_entities": int(len(nt)), "n_link_rows": int(links.height),
-           "density": args.density, "decoy_ratio_global": r_global, "grid_step": float(np.round(grid[1] - grid[0], 4)),
+           "density": args.density, "decoy_ratio_global": r_global, "grid_step": float(np.round(grid[1] - grid[0], 4)), "decision_rule": rule,
            "global_threshold_train_optimal": g_train, "global_threshold_density_adjusted": g_all,
            "selected": selected, "selection_rule": rule, "selected_policy_path": sel_path,
            "configs": results}

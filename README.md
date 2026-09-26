@@ -1,15 +1,18 @@
 # Business Entity Resolution — Team ICE
 
-Blocking + two-stage LightGBM matcher with one-to-one assignment, leak-free cross-fitted
-validation, Platt-calibrated probabilities, training checkpoints and configurable (global or
-per-class) acceptance thresholds selected on out-of-fold predictions.
+Multi-channel blocking + two-stage LightGBM matcher with **many-to-one** assignment (each Source 2/3
+record goes to at most one Source 1 entity, an entity receives any number of records), confidence-based
+rejection (threshold + margin over the runner-up + contradiction rule, selected by nested entity-level
+macro F0.5), leak-free cross-fitted validation, Platt-calibrated probabilities, training checkpoints and
+configurable (global or per-class) acceptance thresholds selected on out-of-fold predictions.
 Only the provided challenge data is used; there are no external lookups, APIs or pretrained
 language models. The only learned model is LightGBM (MIT licence), with far fewer than 8B parameters.
 
 `docs/REPORT.md` holds the diagnosis of the previous version, the leakage audit, the before/after
 metrics, fold-level results, calibration / threshold analysis, the runtime profile, the feature
 ablation, the robustness tests and the list of remaining risks. Section 13 is the per-class
-threshold study (global vs per-class thresholds, nested validation, hold-out results, recommendation).
+threshold study; section 14 is the review of the matching logic, validation, candidate generation,
+decision layer and error analysis (what was verified, what was changed, before/after numbers).
 
 ## Layout
 
@@ -18,9 +21,11 @@ threshold study (global vs per-class thresholds, nested validation, hold-out res
 ├── requirements.txt
 ├── docs/REPORT.md             # analysis + results of the review
 ├── reports/                   # JSON / markdown outputs of the experiments quoted in the report
-├── tests/test_textnorm.py     # edge cases of the text normalisation (python -m pytest tests)
+├── tests/                     # python -m pytest tests: text normalisation, calibration, checkpoints,
+│                              # threshold policies, blocking channels + audit, assignment / decision rule
 ├── tools/
 │   ├── make_subset.py         # name-group-sampled subset of the training data for fast experiments
+│   ├── error_analysis.py      # entity-level error report: categories ranked by macro F0.5 points lost
 │   ├── ablation.py            # feature-group ablation (OOF macro F0.5 / recall / precision)
 │   └── robustness.py          # threshold + calibration under simulated distribution shift
 └── src/
@@ -30,10 +35,10 @@ threshold study (global vs per-class thresholds, nested validation, hold-out res
     ├── folds.py               # step 0: validation folds BEFORE any label-derived preprocessing
     ├── build_lexicon.py       # step 0b: Indic-script -> Latin lexicon, one per held-out fold + "all"
     ├── prepare.py             # step 1: normalise every record (multiprocess) -> records.parquet
-    ├── blocking.py            # step 2: TF-IDF sparse top-k retrieval per country -> candidates_raw.parquet
-    ├── pair_features.py       # step 3: ~75 pairwise features -> pairs/part_*.parquet
-    ├── model.py               # LightGBM helpers, stage-2 context features, assignment
-    ├── thresholds.py          # vectorised macro-F0.5 sweep; scalar or per-link thresholds (shared by train / tuning)
+    ├── blocking.py            # step 2: multi-channel TF-IDF retrieval per country (union of channels) + candidate audit
+    ├── pair_features.py       # step 3: ~100 pairwise features (incl. channel ranks, contradictions) -> pairs/part_*.parquet
+    ├── model.py               # LightGBM helpers, stage-2 context / competition features, many-to-one assignment + rejection
+    ├── thresholds.py          # vectorised macro-F0.5 sweep; thresholds, margin, contradiction penalty; nested rule selection
     ├── threshold_policy.py    # global / per-class threshold policies: class keys, coordinate-ascent fit, nested comparison, JSON
     ├── checkpoint.py          # training checkpoints: manifest, fold models, OOF, calibration, policies, experiment log
     ├── calibrate.py           # Platt / isotonic calibration, prior-shift correction, ECE / Brier
@@ -78,7 +83,9 @@ official validator. Diagnostics land next to the models in `work/`:
 
 | file | content |
 | --- | --- |
-| `work/validation_report.json` | OOF metrics, full threshold sweep, per-fold metrics + variance, per-country metrics, pair-level metrics, calibration (nested), cross-fold audit, retrieval recall@k |
+| `work/validation_report.json` | OOF metrics (macro F0.5, singleton false positives, FP by kind), nested macro F0.5, the decision-rule search, per-fold / per-country / per-source metrics, pair-level metrics, calibration (nested), cross-fold audit, candidate-generation audit |
+| `work/train/blocking_recall.json` | candidate audit: true-pair recall (union and per channel), complete-entity coverage, candidate oracle macro F0.5, ambiguous vs recoverable misses |
+| `work/error_analysis.json` / `.md` | entity-level error analysis under the selected policy: categories ranked by macro F0.5 points lost (`tools/error_analysis.py`) |
 | `work/leakage_check.json` | result of the automated leakage audit (the pipeline stops if it fails) |
 | `work/threshold_analysis.json` | training-optimal vs density-adjusted vs prior-shift global thresholds |
 | `work/threshold_experiments.json` / `.md` | global vs per-class threshold policies: per-class thresholds, per-class metrics before/after, nested (leak-free) comparison, the selected policy |
@@ -95,15 +102,43 @@ python src/folds.py          --data-dir $D --work-dir $W            # --scheme c
 python src/build_lexicon.py  --data-dir $D --work-dir $W
 for S in train test; do
   python src/prepare.py       --data-dir $D --work-dir $W --split $S
-  python src/blocking.py      --data-dir $D --work-dir $W --split $S   # --topk 3 = the scored candidate list
+  python src/blocking.py      --data-dir $D --work-dir $W --split $S   # --channels "combined=5,nchar=3,addr=2,rev=2" (see below)
   python src/pair_features.py --data-dir $D --work-dir $W --split $S
 done
-python src/train.py          --data-dir $D --work-dir $W --checkpoint-name run1   # --resume continues an interrupted run
+python src/train.py          --data-dir $D --work-dir $W --checkpoint-name run1   # --resume continues an interrupted run; --no-rule-search
 python src/leakage_check.py  --data-dir $D --work-dir $W
 python src/select_threshold.py --data-dir $D --work-dir $W           # --method density|prior|train (global threshold)
 python src/tune_thresholds.py --data-dir $D --work-dir $W            # global vs per-class policies -> threshold_policy.json
+python tools/error_analysis.py --data-dir $D --work-dir $W           # entity-level error report (OOF, selected policy)
 python src/predict.py        --data-dir $D --work-dir $W --out-dir output   # --checkpoint run1 --policy <file> --reuse-scores
 ```
+
+### Candidate generation (blocking channels)
+
+`blocking.py` retrieves candidates through several channels per country and scores the **union**:
+`combined` (name + address + name x place TF-IDF cosine, the previous single channel), `name`, `nchar`
+(character 4-grams of the compact name: typos, concatenations, transliterations), `addr`, `cross`, `rare`
+(shared rare name tokens), `hn` (house number + street key) and `rev` (bidirectional: every Source 1 record
+retrieves its top-k Source 2/3 records). `--channels "combined=5,nchar=3,addr=2,rev=2"` sets the channels
+and their k; `combined=3` reproduces the previous candidate set. Every pair keeps its rank in every channel
+and the number of channels that proposed it (retrieval agreement) as features. On the training split the
+step writes a **candidate audit** (`work/train/blocking_recall.json`): true-pair recall of the union and per
+channel, the share of Source 1 entities whose complete record set was retrieved, the candidate *oracle*
+macro F0.5 (a perfect classifier on this candidate set) and the split of the misses into *ambiguous* (an
+address-less record whose entity has exact-name namesakes: no retrieval can single it out) and
+*recoverable*. The channel configuration is chosen on end-to-end macro F0.5, not on recall alone
+(`docs/REPORT.md` section 14).
+
+### Decision rule
+
+`model.assign` links a Source 2/3 record to its best Source 1 candidate only when (1) the calibrated
+probability clears the threshold of the pair's class, (2) the margin over the record's runner-up candidate
+is at least `margin`, and (3) the pair carries no strong contradiction (different unit numbers, different
+postal-like codes, identical names at contradicting addresses, or a clearly different house number on the
+same street) or its probability also clears the threshold raised by `contra_penalty` (>= 1 is a hard veto).
+`train.py` chooses `margin` / `contra_penalty` by *nested* macro F0.5 (thresholds fit on K-1 folds, scored
+on the held-out fold) and keeps the plain threshold unless a richer rule wins by `--rule-min-gain`; the rule
+is stored in every policy file and applied unchanged by `predict.py`.
 
 ### Checkpoints and threshold policies
 
@@ -190,14 +225,18 @@ domains, `(ID: …)` tags, honorifics and parenthesised country tags. Country na
 initials that are part of the business name are kept (`Air India`, `La Poste`, `A&W`). Indic-script
 names and state names are mapped to Latin script with a lexicon learned by aligning training pairs,
 fit per validation fold. Blocking works on TF-IDF vectors (IDF from Source 1) over name tokens,
-order-free name token pairs, compact-name prefixes, address tokens and address bigrams. Retrieval
-runs per country label (an open set), from each Source 2/3 record to its top-3 Source 1 records
-(the exact list the matcher scores; recall@k is measured on the training split), using a parallel
-chunked sparse matrix product. Each candidate gets ~75 string-similarity, overlap, number-agreement
-and retrieval-context features. Stage-1 LightGBM scores the pairs; stage-2 LightGBM re-scores them
+order-free name token pairs, compact-name prefixes, character 4-grams, address tokens and address
+bigrams. Retrieval runs per country label (an open set) through several channels (combined cosine,
+name, char n-grams, address, rare tokens, house-number keys, and the reverse direction from each
+Source 1 record), each a parallel chunked sparse matrix product; the union of the channels is the exact
+list the matcher scores, and its recall / entity coverage / oracle F0.5 are measured on the training
+split. Each candidate gets ~100 string-similarity, overlap, number-agreement, contradiction,
+retrieval-channel and candidate-context features. Stage-1 LightGBM scores the pairs; stage-2 LightGBM re-scores them
 using the stage-1 probabilities of the competing candidates. Folds are assigned per Source 1
-*name group* (namesakes share a fold) and the model of fold k never sees a pair touching fold k.
-Stage-2 OOF probabilities are Platt-calibrated (fit on OOF only). Each Source 2/3 record is linked
-to its best Source 1 candidate when the calibrated probability clears the threshold of its class
-under the selected policy: a global threshold tuned for out-of-fold macro F0.5 and adjusted for the
-test split's higher decoy density, or per-class thresholds when they win the nested comparison.
+*name group* (namesakes share a fold; matched Source 2/3 records inherit their entity's fold) and the
+model of fold k never sees a pair touching fold k. Stage-2 OOF probabilities are Platt-calibrated (fit on
+OOF only). Assignment is many-to-one: each Source 2/3 record is linked to its best Source 1 candidate
+when the calibrated probability clears the threshold of its class under the selected policy (a global
+threshold tuned for out-of-fold macro F0.5 and adjusted for the test split's higher decoy density, or
+per-class thresholds when they win the nested comparison), its margin over the runner-up candidate is
+large enough and no strong contradiction vetoes it; the links are then aggregated per Source 1 entity.

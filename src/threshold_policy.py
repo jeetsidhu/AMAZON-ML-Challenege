@@ -32,9 +32,9 @@ import time
 import numpy as np
 import polars as pl
 
-from thresholds import best_threshold, entity_scores, metrics_at, subset_links, sweep
+from thresholds import accept_mask, best_f05_threshold, entity_scores, metrics_at, subset_links
 
-POLICY_VERSION = 1
+POLICY_VERSION = 2  # 2: decision-rule extras (margin, contra_penalty)
 SEP = "|"
 
 
@@ -117,7 +117,8 @@ def encode_keys(keys, names=None):
 class ThresholdPolicy:
     """scheme 'global' (one threshold) or 'per_class' (thresholds[class key], default for the rest)."""
 
-    def __init__(self, default, thresholds=None, class_by=(), scale="calibrated", unseen="default", name=None, fit=None):
+    def __init__(self, default, thresholds=None, class_by=(), scale="calibrated", unseen="default", name=None, fit=None,
+                 margin=0.0, contra_penalty=0.0):
         self.default = float(default)
         self.thresholds = {k: float(v) for k, v in (thresholds or {}).items()}
         self.class_by = parse_class_by(class_by)
@@ -125,6 +126,13 @@ class ThresholdPolicy:
         self.unseen = unseen  # 'default' | 'max' | 'min' | 'mean': what an unseen class gets
         self.name = name or ("global" if not self.thresholds else SEP.join(self.class_by))
         self.fit = fit or {}
+        # decision-rule extras shared by every class (thresholds.accept_mask / model.assign)
+        self.margin = float(margin or 0.0)
+        self.contra_penalty = float(contra_penalty or 0.0)
+
+    @property
+    def rule(self):
+        return {"margin": self.margin, "contra_penalty": self.contra_penalty}
 
     @property
     def scheme(self):
@@ -146,12 +154,13 @@ class ThresholdPolicy:
     def to_dict(self):
         return {"version": POLICY_VERSION, "name": self.name, "scheme": self.scheme, "scale": self.scale,
                 "class_by": self.class_by, "default": self.default, "unseen": self.unseen,
-                "thresholds": dict(sorted(self.thresholds.items())), "fit": self.fit}
+                "thresholds": dict(sorted(self.thresholds.items())), "margin": self.margin, "contra_penalty": self.contra_penalty,
+                "fit": self.fit}
 
     @classmethod
     def from_dict(cls, d):
         return cls(d["default"], d.get("thresholds"), d.get("class_by", []), d.get("scale", "calibrated"),
-                   d.get("unseen", "default"), d.get("name"), d.get("fit"))
+                   d.get("unseen", "default"), d.get("name"), d.get("fit"), d.get("margin", 0.0), d.get("contra_penalty", 0.0))
 
     def save(self, path):
         os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
@@ -164,10 +173,13 @@ class ThresholdPolicy:
             return cls.from_dict(json.load(f))
 
     def describe(self):
+        extra = ""
+        if self.margin or self.contra_penalty:
+            extra = f" (margin {self.margin:.2f}, contradiction penalty {self.contra_penalty:.2f})"
         if not self.thresholds:
-            return f"{self.name}: global threshold {self.default:.3f}"
+            return f"{self.name}: global threshold {self.default:.3f}{extra}"
         return f"{self.name}: per-class thresholds on {self.class_by} " + ", ".join(
-            f"{k}={v:.2f}" for k, v in sorted(self.thresholds.items())) + f"; unseen -> {self.fallback():.3f}"
+            f"{k}={v:.2f}" for k, v in sorted(self.thresholds.items())) + f"; unseen -> {self.fallback():.3f}{extra}"
 
 
 # ------------------------------------------------------------------ objectives
@@ -208,15 +220,15 @@ def make_objective(kind="macro_f05", beta=0.5, floor=None):
 
 
 # ------------------------------------------------------------------ fitting
-def fit_global(links, nt, grid, decoy_weight=1.0, objective=None):
+def fit_global(links, nt, grid, decoy_weight=1.0, objective=None, margin=0.0, contra_penalty=0.0):
     """Global threshold: the grid point maximising the objective (default macro F0.5)."""
     if objective is None:
-        return float(best_threshold(sweep(links, nt, grid, decoy_weight))["threshold"])
+        return best_f05_threshold(links, nt, grid, decoy_weight, margin, contra_penalty)[0]
     p = links["p"].to_numpy()
     m = np.ones(len(p), dtype=bool)
     best_v, best_t = -np.inf, None
     for t in grid:
-        f, tp, npred, keep = entity_scores(links, nt, float(t), decoy_weight)
+        f, tp, npred, keep = entity_scores(links, nt, float(t), decoy_weight, margin=margin, contra_penalty=contra_penalty)
         v = objective(f, tp, npred, nt, keep, links, m)
         if v > best_v:
             best_v, best_t = v, float(t)
@@ -224,7 +236,7 @@ def fit_global(links, nt, grid, decoy_weight=1.0, objective=None):
 
 
 def fit_per_class(links, nt, cls, n_classes, grid, init, decoy_weight=1.0, objective=None, min_support=200,
-                  passes=4, tol=1e-12, class_objectives=None):
+                  passes=4, tol=1e-12, class_objectives=None, margin=0.0, contra_penalty=0.0):
     """Coordinate ascent: sweep one class's threshold over the grid with all others fixed.
 
     cls: int class code per link row (-1 = no class); init: starting threshold (the global one);
@@ -246,12 +258,12 @@ def fit_per_class(links, nt, cls, n_classes, grid, init, decoy_weight=1.0, objec
         for c in active:
             m = cls == c
             obj = class_objectives.get(c, objective)
-            base_keep = (~m) & (p >= thr[cls.clip(0)])  # rows of the other classes at their current thresholds
+            base_keep = (~m) & accept_mask(links, thr[cls.clip(0)], margin, contra_penalty)  # other classes at their current thresholds
             base_keep &= cls >= 0
             best_v, best_t = -np.inf, thr[c]
             vals = []
             for t in grid:
-                keep = base_keep | (m & (p >= t))
+                keep = base_keep | (m & accept_mask(links, float(t), margin, contra_penalty))
                 f, tp, npred, _ = entity_scores(links, nt, 0.0, dw, keep=keep)
                 v = obj(f, tp, npred, nt, keep, links, m)
                 vals.append(v)
@@ -267,7 +279,7 @@ def fit_per_class(links, nt, cls, n_classes, grid, init, decoy_weight=1.0, objec
     return thr, support, trace
 
 
-def class_report(links, nt, cls, names, thr_rows, decoy_weight=1.0, entity_cls=None):
+def class_report(links, nt, cls, names, thr_rows, decoy_weight=1.0, entity_cls=None, margin=0.0, contra_penalty=0.0):
     """Per-class metrics at per-row thresholds thr_rows. For each class: the link-level precision /
     recall over its rows and the macro F0.5 over the entities it touches (exactly the class's
     entities when entity_cls, a code per Source 1 entity, is given)."""
@@ -282,7 +294,7 @@ def class_report(links, nt, cls, names, thr_rows, decoy_weight=1.0, entity_cls=N
             em[np.unique(s_idx[lm])] = True
         if not lm.any() and not em.any():
             continue
-        r = metrics_at(links, nt, thr_rows, decoy_weight, entity_mask=em, link_mask=lm)
+        r = metrics_at(links, nt, thr_rows, decoy_weight, entity_mask=em, link_mask=lm, margin=margin, contra_penalty=contra_penalty)
         r["threshold"] = float(np.unique(thr_rows[lm])[0]) if lm.any() and len(np.unique(thr_rows[lm])) == 1 else None
         r["n_link_rows"] = int(lm.sum())
         out[name] = r
@@ -291,22 +303,24 @@ def class_report(links, nt, cls, names, thr_rows, decoy_weight=1.0, entity_cls=N
 
 def fit_policy(links, nt, keys, class_by, grid, decoy_weight=1.0, objective="macro_f05", beta=0.5, floor=None,
                min_support=200, passes=4, unseen="default", name=None, global_threshold=None, class_objectives=None,
-               entity_keys=None):
+               entity_keys=None, margin=0.0, contra_penalty=0.0):
     """Fits a global threshold and, when class_by is non-empty, per-class thresholds on top of it.
     keys: class key per link row (class_keys); entity_keys: optional class key per Source 1 entity
     (only meaningful when every attribute is s-side), used for exact per-class entity metrics.
+    margin / contra_penalty: the decision-rule extras (thresholds.accept_mask) the policy carries.
     Returns (policy, report)."""
     class_by = parse_class_by(class_by)
     obj = make_objective(objective, beta, floor)
     t0 = time.time()
-    g = float(global_threshold) if global_threshold is not None else fit_global(links, nt, grid, decoy_weight, None if objective == "macro_f05" else obj)
+    rule = {"margin": margin, "contra_penalty": contra_penalty}
+    g = float(global_threshold) if global_threshold is not None else fit_global(links, nt, grid, decoy_weight, None if objective == "macro_f05" else obj, **rule)
     fit_info = {"objective": objective, "beta": beta, "floor": floor, "min_support": min_support, "passes": passes,
                 "grid": [float(grid[0]), float(grid[-1]), float(np.round(grid[1] - grid[0], 6)) if len(grid) > 1 else None],
                 "global_threshold": g, "n_entities": int(len(nt)), "n_link_rows": int(links.height),
-                "decoy_weight": (float(decoy_weight) if np.ndim(decoy_weight) == 0 else "per_row")}
+                "decoy_weight": (float(decoy_weight) if np.ndim(decoy_weight) == 0 else "per_row"), **rule}
     if not class_by:
-        pol = ThresholdPolicy(g, {}, [], name=name or "global", fit=fit_info)
-        rep = {"overall": metrics_at(links, nt, g, decoy_weight), "per_class": {}}
+        pol = ThresholdPolicy(g, {}, [], name=name or "global", fit=fit_info, **rule)
+        rep = {"overall": metrics_at(links, nt, g, decoy_weight, **rule), "per_class": {}}
         fit_info["seconds"] = round(time.time() - t0, 2)
         return pol, rep
     cls, names = encode_keys(keys)
@@ -314,9 +328,9 @@ def fit_policy(links, nt, keys, class_by, grid, decoy_weight=1.0, objective="mac
     if class_objectives:
         per_class_obj = {names.index(k): make_objective(**v) for k, v in class_objectives.items() if k in names}
     thr, support, trace = fit_per_class(links, nt, cls, len(names), grid, g, decoy_weight, obj, min_support, passes,
-                                        class_objectives=per_class_obj)
+                                        class_objectives=per_class_obj, **rule)
     thresholds = {names[c]: float(thr[c]) for c in range(len(names))}
-    pol = ThresholdPolicy(g, thresholds, class_by, unseen=unseen, name=name or SEP.join(class_by), fit=fit_info)
+    pol = ThresholdPolicy(g, thresholds, class_by, unseen=unseen, name=name or SEP.join(class_by), fit=fit_info, **rule)
     thr_rows = pol.thresholds_for(keys)
     ecls = None
     if entity_keys is not None:
@@ -324,26 +338,26 @@ def fit_policy(links, nt, keys, class_by, grid, decoy_weight=1.0, objective="mac
     fit_info.update({"support": {names[c]: int(support[c]) for c in range(len(names))},
                      "classes_below_min_support": [names[c] for c in range(len(names)) if support[c] < min_support],
                      "trace": trace, "seconds": round(time.time() - t0, 2)})
-    rep = {"overall": metrics_at(links, nt, thr_rows, decoy_weight),
-           "overall_at_global": metrics_at(links, nt, g, decoy_weight),
-           "per_class": class_report(links, nt, cls, names, thr_rows, decoy_weight, ecls),
-           "per_class_at_global": class_report(links, nt, cls, names, np.full(len(keys), g), decoy_weight, ecls)}
+    rep = {"overall": metrics_at(links, nt, thr_rows, decoy_weight, **rule),
+           "overall_at_global": metrics_at(links, nt, g, decoy_weight, **rule),
+           "per_class": class_report(links, nt, cls, names, thr_rows, decoy_weight, ecls, **rule),
+           "per_class_at_global": class_report(links, nt, cls, names, np.full(len(keys), g), decoy_weight, ecls, **rule)}
     return pol, rep
 
 
 def evaluate_policy(policy, links, nt, keys, decoy_weight=1.0, entity_keys=None):
     """Overall + per-class metrics of a policy on a link table (keys per link row)."""
     thr_rows = policy.thresholds_for(keys)
-    rep = {"overall": metrics_at(links, nt, thr_rows, decoy_weight)}
+    rep = {"overall": metrics_at(links, nt, thr_rows, decoy_weight, **policy.rule)}
     if policy.class_by:
         names = sorted(set(policy.thresholds) | set(np.unique(keys).tolist()))
         cls, names = encode_keys(keys, names)
         ecls = encode_keys(entity_keys, names)[0] if entity_keys is not None else None
-        rep["per_class"] = class_report(links, nt, cls, names, thr_rows, decoy_weight, ecls)
+        rep["per_class"] = class_report(links, nt, cls, names, thr_rows, decoy_weight, ecls, **policy.rule)
     return rep
 
 
-def nested_comparison(links, nt, keys, s_fold, configs, grid, decoy_weight=1.0, entity_keys=None):
+def nested_comparison(links, nt, keys, s_fold, configs, grid, decoy_weight=1.0, entity_keys=None, margin=0.0, contra_penalty=0.0):
     """Leak-free comparison of threshold configurations.
 
     For every fold k: fit each configuration (global threshold + per-class thresholds) on the
@@ -367,23 +381,25 @@ def nested_comparison(links, nt, keys, s_fold, configs, grid, decoy_weight=1.0, 
         tr_rows = link_fold != k
         te_rows = link_fold == k
         dw_tr = dw_rows[tr_rows] if per_row_dw else float(dw_rows)
-        g = fit_global(lk_tr, nt_tr, grid, dw_tr)
+        rule = {"margin": margin, "contra_penalty": contra_penalty}
+        g = fit_global(lk_tr, nt_tr, grid, dw_tr, **rule)
         ek_tr = entity_keys[tr_e] if entity_keys is not None else None
         for name, cfg in configs.items():
             cfg = {kk: vv for kk, vv in cfg.items() if kk in ("class_by", "objective", "beta", "floor", "min_support", "passes", "unseen", "class_objectives")}
             pol, _ = fit_policy(lk_tr, nt_tr, keys[tr_rows], cfg.get("class_by", []), grid, dw_tr, global_threshold=g,
-                                entity_keys=ek_tr, **{kk: vv for kk, vv in cfg.items() if kk != "class_by"})
+                                entity_keys=ek_tr, **rule, **{kk: vv for kk, vv in cfg.items() if kk != "class_by"})
             thr_oof[name][te_rows] = pol.thresholds_for(keys[te_rows])
             fold_rows[name].append({"fold": k, "policy": pol.to_dict()["thresholds"] or {"global": pol.default}, "default": pol.default})
     out = {}
+    rule = {"margin": margin, "contra_penalty": contra_penalty}
     for name in configs:
         thr = thr_oof[name]
         assert not np.isnan(thr).any()
-        overall = metrics_at(links, nt, thr, decoy_weight)
+        overall = metrics_at(links, nt, thr, decoy_weight, **rule)
         per_fold = []
         for k in folds:
             em = s_fold == k
-            per_fold.append({"fold": k, **{a: b for a, b in metrics_at(links, nt, thr, decoy_weight, entity_mask=em, link_mask=link_fold == k).items() if a != "threshold"}})
+            per_fold.append({"fold": k, **{a: b for a, b in metrics_at(links, nt, thr, decoy_weight, entity_mask=em, link_mask=link_fold == k, **rule).items() if a != "threshold"}})
         out[name] = {"nested_macro_f05": overall["macro_f05"], "nested_overall": overall, "per_fold": per_fold,
                      "fold_policies": fold_rows[name], "fold_macro_f05_std": float(np.std([r["macro_f05"] for r in per_fold]))}
     base = out["global"]
@@ -393,8 +409,9 @@ def nested_comparison(links, nt, keys, s_fold, configs, grid, decoy_weight=1.0, 
     return out
 
 
-def assign_with_policy(meta, p, keys, policy):
+def assign_with_policy(meta, p, keys, policy, contra=None):
     """Links (t_rid, s_rid, p) accepted under a policy: each Source 2/3 record's best candidate iff
-    p >= the threshold of that pair's class (the same rule as model.assign with per-row thresholds)."""
+    p >= the threshold of that pair's class, the margin over the runner-up is >= policy.margin and
+    the contradiction rule holds (the same rule as model.assign with per-row thresholds)."""
     from model import assign  # local import: model.py imports lightgbm, which the tuning tools do not need
-    return assign(meta, p, policy.thresholds_for(np.asarray(keys, dtype=object)))
+    return assign(meta, p, policy.thresholds_for(np.asarray(keys, dtype=object)), policy.margin, policy.contra_penalty, contra)
