@@ -1,0 +1,154 @@
+{
+ "version": 1,
+ "name": "country|src|noaddr",
+ "scheme": "per_class",
+ "scale": "calibrated",
+ "class_by": [
+  "country",
+  "src",
+  "noaddr"
+ ],
+ "default": 0.73,
+ "unseen": "default",
+ "thresholds": {
+  "country=India|src=2|noaddr=0": 0.72,
+  "country=India|src=2|noaddr=1": 0.74,
+  "country=India|src=3|noaddr=0": 0.71,
+  "country=India|src=3|noaddr=1": 0.76,
+  "country=US|src=2|noaddr=0": 0.75,
+  "country=US|src=2|noaddr=1": 0.76,
+  "country=US|src=3|noaddr=0": 0.74,
+  "country=US|src=3|noaddr=1": 0.77
+ },
+ "fit": {
+  "objective": "macro_f05",
+  "beta": 0.5,
+  "floor": null,
+  "min_support": 200,
+  "passes": 4,
+  "grid": [
+   0.05,
+   0.98,
+   0.01
+  ],
+  "global_threshold": 0.73,
+  "n_entities": 442586,
+  "n_link_rows": 2065311,
+  "decoy_weight": 2.022336703082718,
+  "support": {
+   "country=India|src=2|noaddr=0": 163047,
+   "country=India|src=2|noaddr=1": 10694,
+   "country=India|src=3|noaddr=0": 163558,
+   "country=India|src=3|noaddr=1": 11426,
+   "country=US|src=2|noaddr=0": 244764,
+   "country=US|src=2|noaddr=1": 19345,
+   "country=US|src=3|noaddr=0": 247048,
+   "country=US|src=3|noaddr=1": 19564
+  },
+  "classes_below_min_support": [],
+  "trace": [
+   {
+    "pass": 0,
+    "class": 0,
+    "threshold": 0.72,
+    "objective": 0.9873620232351252
+   },
+   {
+    "pass": 0,
+    "class": 1,
+    "threshold": 0.74,
+    "objective": 0.9873621271737775
+   },
+   {
+    "pass": 0,
+    "class": 2,
+    "threshold": 0.71,
+    "objective": 0.9873703793685432
+   },
+   {
+    "pass": 0,
+    "class": 3,
+    "threshold": 0.76,
+    "objective": 0.9873712817657777
+   },
+   {
+    "pass": 0,
+    "class": 4,
+    "threshold": 0.75,
+    "objective": 0.9873716009555745
+   },
+   {
+    "pass": 0,
+    "class": 5,
+    "threshold": 0.76,
+    "objective": 0.9873720178796723
+   },
+   {
+    "pass": 0,
+    "class": 6,
+    "threshold": 0.74,
+    "objective": 0.9873828669582959
+   },
+   {
+    "pass": 0,
+    "class": 7,
+    "threshold": 0.77,
+    "objective": 0.9873872704171842
+   },
+   {
+    "pass": 1,
+    "class": 0,
+    "threshold": 0.72,
+    "objective": 0.9873872704171842
+   },
+   {
+    "pass": 1,
+    "class": 1,
+    "threshold": 0.74,
+    "objective": 0.9873872704171842
+   },
+   {
+    "pass": 1,
+    "class": 2,
+    "threshold": 0.71,
+    "objective": 0.9873872704171842
+   },
+   {
+    "pass": 1,
+    "class": 3,
+    "threshold": 0.76,
+    "objective": 0.9873872704171842
+   },
+   {
+    "pass": 1,
+    "class": 4,
+    "threshold": 0.75,
+    "objective": 0.9873872704171842
+   },
+   {
+    "pass": 1,
+    "class": 5,
+    "threshold": 0.76,
+    "objective": 0.9873872704171842
+   },
+   {
+    "pass": 1,
+    "class": 6,
+    "threshold": 0.74,
+    "objective": 0.9873872704171842
+   },
+   {
+    "pass": 1,
+    "class": 7,
+    "threshold": 0.77,
+    "objective": 0.9873872704171842
+   }
+  ],
+  "seconds": 149.83,
+  "checkpoint": "ckpt_subset20_r150",
+  "density": "global",
+  "decoy_ratio_global": 2.022336703082718,
+  "decoy_ratios": {},
+  "global_threshold_train_optimal": 0.71
+ }
+}

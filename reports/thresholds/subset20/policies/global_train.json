@@ -1,0 +1,16 @@
+{
+ "version": 1,
+ "name": "global_train",
+ "scheme": "global",
+ "scale": "calibrated",
+ "class_by": [],
+ "default": 0.71,
+ "unseen": "default",
+ "thresholds": {},
+ "fit": {
+  "source": "select_threshold.py",
+  "method": "train",
+  "decoy_ratio": 2.022336703082718,
+  "oof_macro_f05": 0.9880949129468465
+ }
+}

@@ -507,3 +507,101 @@ precision-first F0.3 on address-less records pushes their threshold to 0.87 with
 Per-class decoy ratios reproduce the global ratio on the subset (2.00 - 2.04: decoys are sampled
 uniformly there) and change no decision; on the real test split they are what would carry a
 class-specific density shift (France, Source 3) into the thresholds.
+
+### 13.4 Results, 20 % subset (443k Source 1 entities, checkpoint `ckpt_subset20_r150`, 150/100 rounds)
+
+Four times more entities and namesake collisions (retrieval and matching are harder: OOF macro F0.5
+0.9874 vs 0.9909 on the 5 % subset), a 110k-entity hold-out with 2x decoy density. Raw outputs and the
+full pipeline log: `reports/thresholds/subset20/`, `reports/thresholds/logs/subset20_pipeline.log`.
+Global threshold: train-optimal 0.71, density-adjusted 0.73 (r = 2.02). Fold std of macro F0.5: 0.00002.
+
+**Selected thresholds per class:**
+
+| policy | thresholds |
+|---|---|
+| global | 0.73 |
+| country | India 0.71, US 0.74 |
+| src | S2 0.73, S3 0.74 |
+| country x src | India/S2 0.72, India/S3 0.71, US/S2 0.73, US/S3 0.79 |
+| indic | Latin 0.73, Indic script 0.65 |
+| noaddr | 0.73 / 0.73 (identical to global) |
+| country x src x indic | 0.63 - 0.79 (6 classes) |
+| country x src x noaddr | 0.71 - 0.77 (8 classes) |
+
+Note the sign flips against the 5 % subset: India 0.76 -> 0.71, Indic script 0.77 -> 0.65, the
+address-less class 0.83 -> 0.73. The per-class optima are not stable properties of the classes; they
+are where the noise of a flat F0.5 curve happens to peak on a given sample.
+
+**Nested (leak-free) comparison, OOF:**
+
+| policy | classes | nested macro F0.5 | gain vs global | folds better | in-sample macro F0.5 | precision | recall |
+|---|---|---|---|---|---|---|---|
+| global | 0 | 0.98736 | - | - | 0.98736 | 0.99772 | 0.97071 |
+| country | 2 | 0.98734 | -0.00001 | 0/4 | 0.98736 | 0.99769 | 0.97078 |
+| src | 2 | 0.98732 | -0.00003 | 0/4 | 0.98736 | 0.99775 | 0.97062 |
+| country x src | 4 | 0.98734 | -0.00001 | 0/4 | 0.98738 | 0.99776 | 0.97056 |
+| indic | 2 | 0.98736 | +0.00000 | 2/4 | 0.98736 | 0.99771 | 0.97073 |
+| noaddr | 2 | 0.98732 | -0.00004 | 0/4 | 0.98736 | 0.99772 | 0.97071 |
+| country x src x indic | 6 | 0.98733 | -0.00003 | 1/4 | 0.98739 | 0.99776 | 0.97057 |
+| country x src x noaddr | 8 | 0.98732 | -0.00003 | 0/4 | 0.98739 | 0.99777 | 0.97058 |
+
+**Per-class metrics, country x src** (OOF, global -> class threshold): India/S2 0.98611 -> 0.98612,
+India/S3 0.98656 -> 0.98657, US/S2 0.99004 -> 0.99007, US/S3 0.98997 -> 0.98999. The largest in-sample
+per-class gain in any configuration is +0.00003.
+
+**Hold-out (110k entities, 2x decoy density), full pipeline per policy:**
+
+| policy | macro F0.5 | delta vs global (density) | precision | recall | singleton acc | F0.5 India | F0.5 US |
+|---|---|---|---|---|---|---|---|
+| global, train-optimal 0.71 | 0.99112 | +0.00003 | 0.99848 | 0.97663 | 0.9958 | 0.98986 | 0.99193 |
+| global, density-adjusted 0.73 | 0.99109 | - | 0.99859 | 0.97630 | 0.9964 | 0.98991 | 0.99185 |
+| global, prior-shift 0.78 | 0.99099 | -0.00010 | 0.99871 | 0.97576 | 0.9971 | 0.98974 | 0.99180 |
+| country | 0.99107 | -0.00002 | 0.99854 | 0.97637 | 0.9963 | 0.98986 | 0.99184 |
+| src | 0.99108 | -0.00001 | 0.99861 | 0.97623 | 0.9966 | 0.98992 | 0.99184 |
+| country x src | 0.99102 | -0.00007 | 0.99858 | 0.97620 | 0.9963 | 0.98985 | 0.99178 |
+| indic | 0.99110 | +0.00001 | 0.99858 | 0.97635 | 0.9964 | 0.98992 | 0.99185 |
+| noaddr | 0.99109 | +0.00000 | 0.99859 | 0.97630 | 0.9964 | 0.98991 | 0.99185 |
+| country x src x indic | 0.99102 | -0.00007 | 0.99859 | 0.97621 | 0.9963 | 0.98985 | 0.99178 |
+| country x src x noaddr | 0.99105 | -0.00004 | 0.99859 | 0.97620 | 0.9963 | 0.98984 | 0.99183 |
+
+### 13.5 Conclusion and recommendation
+
+* **Per-class thresholds do not improve accuracy.** On two subsets (111k and 443k entities), eight class
+  definitions, three objectives and two density models, no per-class policy beats the global threshold
+  on held-out entities by more than the fold noise (best nested gain +0.00003 on the 5 % subset, +0.00000
+  on the 20 % subset; hold-out deltas between -0.00010 and +0.00001). In-sample, per-class thresholds win
+  by 0.00003 - 0.00009, which is what fitting 2-8 extra parameters to a flat curve buys and what the
+  nested comparison shows to be noise.
+* **They do not improve robustness either.** The per-class optima flip direction between the two subsets
+  (India 0.76 vs 0.71, Indic 0.77 vs 0.65, no-address 0.83 vs 0.73), so a per-class policy would carry
+  sample-specific noise into the test decision, and the class the test split adds (France) has no
+  OOF estimate at all and would fall back to the global value anyway. The global threshold, by contrast,
+  moves by at most 0.02 across folds and subsets, and section 9 already showed its regret under 2-3x
+  decoy density, source-only and script-only shifts is <= 0.0007.
+* **Why**: the calibrated probability already absorbs the class differences the thresholds were meant to
+  correct. Per-class precision differs (India/S3 0.997 vs US/S2 0.998) because the *problem* differs
+  (more namesakes, fewer addresses), not because the scores are miscalibrated per class; the F0.5 curve
+  of every class is flat between roughly 0.65 and 0.85, so the threshold has almost no leverage on it.
+  What limits the score is retrieval and namesake ambiguity (section 8), which no threshold reaches.
+* **Recommendation for the final run: the global, density-adjusted threshold** (`--select auto` picks it;
+  `select_threshold.py --method density` and `tune_thresholds.py` agree on the value). Keep the per-class
+  machinery in the pipeline as a check that runs on every training checkpoint (~7 min on 111k entities,
+  ~36 min on 443k): if a future model, feature set or the full-data run produces a nested gain above the
+  fold std, `--select auto` will switch to it and `threshold_experiments.md` will say why. Do not select a
+  per-class policy by hand on in-sample or hold-out numbers; both are within noise here.
+* **Between the global variants**, train-optimal and density-adjusted are equivalent on both subsets
+  (0.71 / 0.73 on the 20 % subset differ by 0.00003 on the hold-out, inside noise); the prior-shift
+  threshold is consistently 0.0001 - 0.0002 worse. `density` stays the default.
+* **For France** (unseen at training time): the policy's default (global) threshold. `--unseen max` is
+  available if the leaderboard shows French false positives dominate; nothing in the training data can
+  decide that.
+
+### 13.6 Artefacts
+
+| what | where |
+|---|---|
+| 5 % subset: policies, experiment tables, hold-out evaluation, checkpoint manifest, validation report, experiment log | `reports/thresholds/subset05/` (`policies/*.json`, `threshold_experiments{,_pc,_obj}.{json,md}`, `holdout_policy_eval.{json,md}`, `checkpoint_manifest.json`, `experiments.jsonl`) |
+| 20 % subset: the same | `reports/thresholds/subset20/` |
+| logs | `reports/thresholds/logs/` (training, tuning, hold-out evaluation, resume test, `run.sh` smoke test, the whole 20 % pipeline) |
+| checkpoints used | `work05/checkpoints/ckpt_subset05_r150`, `work20/checkpoints/ckpt_subset20_r150` (local work directories, 45 MB / 180 MB; manifests copied to the report folders); a resumed copy `ckpt_resume_test` reproduced the original OOF result exactly after one fold model was deleted (`subset05_resume_test.log`) |
+| example configurations | `configs/threshold_configs.json` |

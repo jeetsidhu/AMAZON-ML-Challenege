@@ -1,0 +1,56 @@
+{
+ "version": 1,
+ "name": "noaddr",
+ "scheme": "per_class",
+ "scale": "calibrated",
+ "class_by": [
+  "noaddr"
+ ],
+ "default": 0.73,
+ "unseen": "default",
+ "thresholds": {
+  "noaddr=0": 0.73,
+  "noaddr=1": 0.73
+ },
+ "fit": {
+  "objective": "macro_f05",
+  "beta": 0.5,
+  "floor": null,
+  "min_support": 200,
+  "passes": 4,
+  "grid": [
+   0.05,
+   0.98,
+   0.01
+  ],
+  "global_threshold": 0.73,
+  "n_entities": 442586,
+  "n_link_rows": 2065311,
+  "decoy_weight": 2.022336703082718,
+  "support": {
+   "noaddr=0": 436888,
+   "noaddr=1": 56723
+  },
+  "classes_below_min_support": [],
+  "trace": [
+   {
+    "pass": 0,
+    "class": 0,
+    "threshold": 0.73,
+    "objective": 0.9873563277929691
+   },
+   {
+    "pass": 0,
+    "class": 1,
+    "threshold": 0.73,
+    "objective": 0.9873563277929691
+   }
+  ],
+  "seconds": 19.27,
+  "checkpoint": "ckpt_subset20_r150",
+  "density": "global",
+  "decoy_ratio_global": 2.022336703082718,
+  "decoy_ratios": {},
+  "global_threshold_train_optimal": 0.71
+ }
+}

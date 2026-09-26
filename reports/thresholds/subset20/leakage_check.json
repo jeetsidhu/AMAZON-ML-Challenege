@@ -1,0 +1,81 @@
+{
+ "name_groups": {
+  "n": 291791,
+  "split_across_folds": 0
+ },
+ "matched_records_fold_mismatch": 0,
+ "oof": {
+  "pairs": 6180390,
+  "duplicate_pids": 0,
+  "positive_pairs_cross_fold": 0,
+  "cross_fold_pair_share": 0.3612229972542186
+ },
+ "lexicon": {
+  "fold_only_tokens_checked": 0,
+  "leaked_into_own_fold_lexicon": 0,
+  "lexicons": {
+   "all": {
+    "name": 1347,
+    "addr": 16
+   },
+   "fold_0": {
+    "name": 1347,
+    "addr": 16
+   },
+   "fold_1": {
+    "name": 1347,
+    "addr": 16
+   },
+   "fold_2": {
+    "name": 1346,
+    "addr": 16
+   },
+   "fold_3": {
+    "name": 1347,
+    "addr": 16
+   }
+  }
+ },
+ "label_shuffle_canary_auc": 0.4991066456008791,
+ "top_single_feature_auc": [
+  [
+   "gap_second",
+   0.9872
+  ],
+  [
+   "score",
+   0.975
+  ],
+  [
+   "s_rank",
+   0.0507
+  ],
+  [
+   "cos_addr",
+   0.9491
+  ],
+  [
+   "ad_jacc",
+   0.9486
+  ],
+  [
+   "ad_tset",
+   0.9456
+  ],
+  [
+   "rank",
+   0.0648
+  ],
+  [
+   "s_gap_best",
+   0.0732
+  ]
+ ],
+ "test_split": {
+  "records_have_fold_or_label": false,
+  "pairs_have_label": false
+ },
+ "model_features_bookkeeping": [],
+ "problems": [],
+ "ok": true
+}

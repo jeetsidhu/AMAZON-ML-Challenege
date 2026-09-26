@@ -1,0 +1,32 @@
+{
+ "version": 1,
+ "name": "global",
+ "scheme": "global",
+ "scale": "calibrated",
+ "class_by": [],
+ "default": 0.73,
+ "unseen": "default",
+ "thresholds": {},
+ "fit": {
+  "objective": "macro_f05",
+  "beta": 0.5,
+  "floor": null,
+  "min_support": 200,
+  "passes": 4,
+  "grid": [
+   0.05,
+   0.98,
+   0.01
+  ],
+  "global_threshold": 0.73,
+  "n_entities": 442586,
+  "n_link_rows": 2065311,
+  "decoy_weight": 2.022336703082718,
+  "seconds": 0.19,
+  "checkpoint": "ckpt_subset20_r150",
+  "density": "global",
+  "decoy_ratio_global": 2.022336703082718,
+  "decoy_ratios": {},
+  "global_threshold_train_optimal": 0.71
+ }
+}

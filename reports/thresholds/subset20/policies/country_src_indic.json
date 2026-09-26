@@ -1,0 +1,126 @@
+{
+ "version": 1,
+ "name": "country|src|indic",
+ "scheme": "per_class",
+ "scale": "calibrated",
+ "class_by": [
+  "country",
+  "src",
+  "indic"
+ ],
+ "default": 0.73,
+ "unseen": "default",
+ "thresholds": {
+  "country=India|src=2|indic=0": 0.72,
+  "country=India|src=2|indic=1": 0.63,
+  "country=India|src=3|indic=0": 0.71,
+  "country=India|src=3|indic=1": 0.77,
+  "country=US|src=2|indic=0": 0.73,
+  "country=US|src=3|indic=0": 0.79
+ },
+ "fit": {
+  "objective": "macro_f05",
+  "beta": 0.5,
+  "floor": null,
+  "min_support": 200,
+  "passes": 4,
+  "grid": [
+   0.05,
+   0.98,
+   0.01
+  ],
+  "global_threshold": 0.73,
+  "n_entities": 442586,
+  "n_link_rows": 2065311,
+  "decoy_weight": 2.022336703082718,
+  "support": {
+   "country=India|src=2|indic=0": 141792,
+   "country=India|src=2|indic=1": 54847,
+   "country=India|src=3|indic=0": 156420,
+   "country=India|src=3|indic=1": 37312,
+   "country=US|src=2|indic=0": 247112,
+   "country=US|src=3|indic=0": 249064
+  },
+  "classes_below_min_support": [],
+  "trace": [
+   {
+    "pass": 0,
+    "class": 0,
+    "threshold": 0.72,
+    "objective": 0.9873586745818732
+   },
+   {
+    "pass": 0,
+    "class": 1,
+    "threshold": 0.63,
+    "objective": 0.987367860916516
+   },
+   {
+    "pass": 0,
+    "class": 2,
+    "threshold": 0.71,
+    "objective": 0.9873729294819489
+   },
+   {
+    "pass": 0,
+    "class": 3,
+    "threshold": 0.77,
+    "objective": 0.9873742025138176
+   },
+   {
+    "pass": 0,
+    "class": 4,
+    "threshold": 0.73,
+    "objective": 0.9873742025138176
+   },
+   {
+    "pass": 0,
+    "class": 5,
+    "threshold": 0.79,
+    "objective": 0.9873858913406138
+   },
+   {
+    "pass": 1,
+    "class": 0,
+    "threshold": 0.72,
+    "objective": 0.9873858913406138
+   },
+   {
+    "pass": 1,
+    "class": 1,
+    "threshold": 0.63,
+    "objective": 0.9873858913406138
+   },
+   {
+    "pass": 1,
+    "class": 2,
+    "threshold": 0.71,
+    "objective": 0.9873858913406138
+   },
+   {
+    "pass": 1,
+    "class": 3,
+    "threshold": 0.77,
+    "objective": 0.9873858913406138
+   },
+   {
+    "pass": 1,
+    "class": 4,
+    "threshold": 0.73,
+    "objective": 0.9873858913406138
+   },
+   {
+    "pass": 1,
+    "class": 5,
+    "threshold": 0.79,
+    "objective": 0.9873858913406138
+   }
+  ],
+  "seconds": 113.67,
+  "checkpoint": "ckpt_subset20_r150",
+  "density": "global",
+  "decoy_ratio_global": 2.022336703082718,
+  "decoy_ratios": {},
+  "global_threshold_train_optimal": 0.71
+ }
+}

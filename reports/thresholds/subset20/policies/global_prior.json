@@ -1,0 +1,16 @@
+{
+ "version": 1,
+ "name": "global_prior",
+ "scheme": "global",
+ "scale": "calibrated",
+ "class_by": [],
+ "default": 0.7679,
+ "unseen": "default",
+ "thresholds": {},
+ "fit": {
+  "source": "select_threshold.py",
+  "method": "prior",
+  "decoy_ratio": 2.022336703082718,
+  "oof_macro_f05": 0.987981936206757
+ }
+}
