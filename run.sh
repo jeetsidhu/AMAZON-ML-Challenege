@@ -8,10 +8,16 @@
 #   bash run.sh --no-venv             # use the current Python (Kaggle / Colab: packages preinstalled)
 #   bash run.sh --smoke-only          # only the smoke test: whole pipeline on a 0.3 % slice of the data (~2 min)
 #   bash run.sh --skip-smoke          # skip the smoke test
+#   bash run.sh --holdout 0.2         # LOCAL SCORING: split the labelled training data by business-name group into
+#                                     # 80 % train / 20 % test (disjoint entities), run the whole pipeline on the split
+#                                     # and score the 20 % with the challenge metric (macro F0.5, precision, recall,
+#                                     # per country) -> $WORK/holdout_eval.json + printed at the end. The real test set
+#                                     # is not used. HOLDOUT_DECOY_MULT=2 gives the test half the platform's 2x decoy density.
 #
 # Environment overrides (all optional):
 #   DATA=dataset  WORK=work  OUT=output  LOGS=logs  ROUNDS1=150  ROUNDS2=100  PY=python3
 #   CKPT=<name>                                    # checkpoint name for train.py (default: timestamped)
+#   HOLDOUT_DECOY_MULT=1  HOLDOUT_TRAIN_FRAC=<1-holdout>  SPLIT_DIR=${DATA}_holdout   # --holdout options
 #   THRESHOLD_ARGS="--density per_class --select country"   # extra arguments for tune_thresholds.py
 #   POST_STEP_CMD="bash tools/sync_outputs.sh my-run"   # run after every finished step (e.g. push outputs)
 #
@@ -25,10 +31,11 @@ trap 'echo "[$(date "+%F %T")] ABORTED at line $LINENO: $BASH_COMMAND (exit $?)"
 DATA="${DATA:-dataset}"; WORK="${WORK:-work}"; OUT="${OUT:-output}"; LOGS="${LOGS:-logs}"
 ROUNDS1="${ROUNDS1:-150}"; ROUNDS2="${ROUNDS2:-100}"; PY="${PY:-python3}"
 LFS_BASE="https://media.githubusercontent.com/media/SukhvirKooner/ml-challenge-2026/main"
-SKIP_DOWNLOAD=0; FROM=""; FRESH=0; NO_VENV=0; SMOKE_ONLY=0; SKIP_SMOKE=0
+SKIP_DOWNLOAD=0; FROM=""; FRESH=0; NO_VENV=0; SMOKE_ONLY=0; SKIP_SMOKE=0; HOLDOUT=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --skip-download) SKIP_DOWNLOAD=1 ;;
+    --holdout) HOLDOUT="$2"; shift ;;
     --no-venv) NO_VENV=1 ;;
     --smoke-only) SMOKE_ONLY=1 ;;
     --skip-smoke) SKIP_SMOKE=1 ;;
@@ -40,7 +47,7 @@ done
 mkdir -p "$LOGS" "$WORK/.done" "$OUT"
 T_START=$(date +%s)
 log() { printf '[%s] %s\n' "$(date '+%F %T')" "$*" | tee -a "$LOGS/run.log"; }
-STEPS=(venv download tests smoke folds lexicon prepare_train blocking_train features_train prepare_test blocking_test features_test train leakage_check select_threshold tune_thresholds predict validate summary)
+STEPS=(venv download tests smoke holdout_split folds lexicon prepare_train blocking_train features_train prepare_test blocking_test features_test train leakage_check select_threshold tune_thresholds predict validate evaluate summary)
 N=0
 step() {  # step <name> <command...>
   local name="$1"; shift
@@ -130,9 +137,39 @@ smoke() {
     | python -c "import json,sys; d=json.load(sys.stdin)['overall']; print('SMOKE hold-out macro F0.5 %.4f  precision %.4f  recall %.4f' % (d['macro_f05'], d['micro_precision'], d['micro_recall']))"
   echo "smoke test OK: every stage ran end to end in this environment"
 }
+holdout_split() {
+  # disjoint train / test halves of the labelled training data, sampled by business-name group (namesakes stay together)
+  local train_frac="${HOLDOUT_TRAIN_FRAC:-$(awk -v h="$HOLDOUT" 'BEGIN{printf "%.4f", 1-h}')}"
+  python tools/make_subset.py --data-dir "$DATA" --out-dir "$SPLIT" --frac "$train_frac" --test-frac "$HOLDOUT" \
+    --decoy-mult 1 --test-decoy-mult "${HOLDOUT_DECOY_MULT:-1}"
+  python - "$SPLIT" <<'PY'
+import sys, polars as pl
+d = sys.argv[1]
+r = lambda p: pl.read_csv(p, separator="\t", quote_char=None, infer_schema_length=0)["entity_id"].to_list()
+for a, b in (("source1", "source1"), ("source2", "source2"), ("source3", "source3")):
+    shared = set(r(f"{d}/train/train_{a}.tsv")) & set(r(f"{d}/test/test_{b}.tsv"))
+    assert not shared, f"{len(shared)} {a} ids shared between the train and test halves"
+print("train and test halves share no entity ids")
+PY
+}
+evaluate() {
+  python src/evaluate.py --pred "$OUT/matching_results.tsv" --truth "$D/test/subset_ground_truth.tsv" \
+    --source1 "$D/test/test_source1.tsv" --out "$WORK/holdout_eval.json"
+}
 summary() {
   python tools/summarize_reports.py --work-dir "$WORK" | tee "$WORK/summary.md"
   echo; echo "submission files:"; ls -la "$OUT"
+  if [ -f "$WORK/holdout_eval.json" ]; then
+    echo; echo "HOLD-OUT SCORE ($HOLDOUT of the labelled data, never used for training / thresholds):"
+    python - "$WORK/holdout_eval.json" <<'PY'
+import json, sys
+e = json.load(open(sys.argv[1]))
+rows = [("overall", e["overall"])] + sorted(e.get("per_country", {}).items())
+print(f"{'':10s} {'entities':>9s} {'macro F0.5':>11s} {'precision':>10s} {'recall':>8s} {'singletons':>10s}")
+for k, v in rows:
+    print(f"{k or '(none)':10s} {v['n_entities']:9d} {v['macro_f05']:11.5f} {v['micro_precision']:10.5f} {v['micro_recall']:8.5f} {v['singleton_acc']:10.4f}")
+PY
+  fi
 }
 
 step venv setup_venv
@@ -145,6 +182,11 @@ step tests python -m pytest tests -q
 if [ $SKIP_SMOKE -eq 0 ]; then step smoke smoke; else N=$((N+1)); log "skip  04_smoke (--skip-smoke)"; fi
 if [ $SMOKE_ONLY -eq 1 ]; then log "SMOKE ONLY: done in $(( ($(date +%s) - T_START) / 60 )) min; rerun without --smoke-only for the full pipeline (the smoke step is then skipped)"; exit 0; fi
 D="$DATA"; W="$WORK"
+if [ -n "$HOLDOUT" ]; then
+  SPLIT="${SPLIT_DIR:-${DATA%/}_holdout}"
+  step holdout_split holdout_split
+  D="$SPLIT"; log "hold-out mode: pipeline runs on $D (train = $(awk -v h="$HOLDOUT" 'BEGIN{printf "%.0f", (1-h)*100}') %, test = labelled $HOLDOUT of the training data)"
+else N=$((N+1)); fi
 step folds            python src/folds.py            --data-dir "$D" --work-dir "$W"
 step lexicon          python src/build_lexicon.py    --data-dir "$D" --work-dir "$W"
 step prepare_train    python src/prepare.py          --data-dir "$D" --work-dir "$W" --split train
@@ -159,5 +201,6 @@ step select_threshold python src/select_threshold.py --data-dir "$D" --work-dir 
 step tune_thresholds  python src/tune_thresholds.py  --data-dir "$D" --work-dir "$W" ${THRESHOLD_ARGS:-}
 step predict          python src/predict.py          --data-dir "$D" --work-dir "$W" --out-dir "$OUT"
 step validate         python src/validate_submission.py --matching "$OUT/matching_results.tsv" --candidate "$OUT/candidate_pairs.tsv" --test-dir "$D/test"
+if [ -n "$HOLDOUT" ]; then step evaluate evaluate; else N=$((N+1)); fi
 step summary          summary
 log "ALL DONE in $(( ($(date +%s) - T_START) / 60 )) min. Submission: $OUT/matching_results.tsv + $OUT/candidate_pairs.tsv; diagnostics: $WORK/summary.md, $WORK/validation_report.json, $WORK/threshold_experiments.md, $WORK/profile.json; checkpoint: $WORK/checkpoints/$(cat "$WORK/checkpoints/LATEST" 2>/dev/null)"

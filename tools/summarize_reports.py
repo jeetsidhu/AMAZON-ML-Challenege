@@ -89,6 +89,18 @@ def main():
         for k, v in ta["candidates"].items():
             a, b = ta["oof_plain_at"][k], ta["oof_density_adjusted_at"][k]
             print(f"| {k} | {v:.3f} | {fmt(a['macro_f05'])} | {fmt(b['macro_f05'])} | {fmt(b['micro_precision'])} | {fmt(b['micro_recall'])} |")
+    ho = load(os.path.join(w, "holdout_eval.json"))
+    if ho:
+        print("\n## Hold-out score (labelled split never used for training or thresholds)\n")
+        std = rep["per_fold"]["macro_f05_std"] if rep else None
+        oof = rep["oof_at_threshold"]["macro_f05"] if rep else None
+        print("| set | entities | macro F0.5 | precision | recall | singleton acc |\n|---|---|---|---|---|---|")
+        for k, v in [("overall", ho["overall"])] + sorted(ho.get("per_country", {}).items()):
+            print(f"| {k or '(none)'} | {v['n_entities']} | {fmt(v['macro_f05'])} | {fmt(v['micro_precision'])} | {fmt(v['micro_recall'])} | {fmt(v['singleton_acc'], 4)} |")
+        if oof is not None:
+            d = ho["overall"]["macro_f05"] - oof
+            print(f"\nhold-out macro F0.5 {fmt(ho['overall']['macro_f05'])} vs out-of-fold {fmt(oof)}: delta {d:+.5f} "
+                  f"({'within' if std is not None and abs(d) <= 2 * std else 'outside'} 2x the fold std {fmt(std, 5) if std is not None else '?'})")
     te = load(os.path.join(w, "threshold_experiments.json"))
     if te:
         print("\n## Threshold policies: global vs per-class (tune_thresholds.py)\n")
