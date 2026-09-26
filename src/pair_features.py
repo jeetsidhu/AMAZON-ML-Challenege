@@ -258,12 +258,16 @@ def name_idf(rec):
     """Source 1 document frequency of every core-name token -> (token, idf) table. Computed from the
     records of the split being processed (no labels): a token shared by two records is strong evidence
     when few Source 1 records carry it, and a token present on one side only is a strong contradiction
-    when it is rare (a typo of a common token is rare too, which the typo-tolerant nm_xt/nm_xs cover)."""
+    when it is rare (a typo of a common token is rare too, which the typo-tolerant nm_xt/nm_xs cover).
+    The idf is normalised by its maximum, log1p(n): a token seen once scores 1 whatever the corpus size
+    (the raw log1p(n/df) shifts with the number of Source 1 records, which differs between the training
+    split and any hold-out / test split)."""
     s1 = rec.filter(pl.col("src") == 1)
     n = max(s1.height, 1)
     df = (s1.lazy().select(pl.col("n_core").fill_null("").str.split(" ").alias("t")).explode("t")
           .filter(pl.col("t") != "").group_by("t").agg(pl.len().alias("df")).collect())
-    return df.select("t", np.log1p(n / pl.col("df")).cast(pl.Float32).alias("idf")), float(np.log1p(n))
+    top = float(np.log1p(n))
+    return df.select("t", (np.log1p(n / pl.col("df")) / top).cast(pl.Float32).alias("idf")), 1.0
 
 
 def idf_features(df, idf, idf_max):
