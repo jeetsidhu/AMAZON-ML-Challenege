@@ -709,7 +709,8 @@ whose decoy density resembles the test split.
 | combined=5 + all new features | 4.92 | 0.9906 | 0.99173 | 0.99171 | 0.99866 | 0.97761 | 27 | 368 / 137 | 0.99120 | 0.99921 | 0.97582 |
 | combined=5 + all new features, corpus-size-free idf | 4.92 | 0.9906 | 0.99166 | 0.99158 | 0.99869 | 0.97741 | 26 | 365 / 129 | 0.99118 | 0.99914 | 0.97542 |
 | combined=5, no new feature | 4.92 | 0.9906 | 0.99111 | 0.99106 | 0.99834 | 0.97685 | | | 0.99194 | 0.99879 | 0.97900 |
-| combined=5, new features minus token-idf group (**shipped default**) | 4.92 | 0.9906 | 0.99117 | 0.99115 | 0.99815 | 0.97757 | 30 | 414 / 220 | **0.99218** | 0.99868 | 0.97971 |
+| combined=5, new features minus token-idf group | 4.92 | 0.9906 | 0.99117 | 0.99115 | 0.99815 | 0.97757 | 30 | 414 / 220 | 0.99218 | 0.99868 | 0.97971 |
+| combined=5, nchar=3, addr=2, rev=2, same features (**shipped default**) | 5.89 | 0.9918 | 0.99154 | 0.99149 | 0.99846 | 0.97797 | | | **0.99240** | 0.99890 | 0.97972 |
 | combined=5, new features minus contradiction group | 4.92 | 0.9906 | 0.99171 | 0.99171 | 0.99855 | 0.97781 | | | 0.99167 | 0.99906 | 0.97739 |
 | combined=5, new features minus stage-2 competition group | 4.92 | 0.9906 | 0.99160 | 0.99157 | 0.99844 | 0.97783 | | | 0.99135 | 0.99902 | 0.97663 |
 | combined=5, new features minus channel group | 4.92 | 0.9906 | 0.99157 | 0.99153 | 0.99846 | 0.97785 | | | 0.99154 | 0.99908 | 0.97667 |
@@ -721,7 +722,10 @@ What the table says:
 
 * **The larger candidate set is a real gain**: with the previous feature set, combined=5 raises the
   OOF score by 0.00025 and the hold-out by 0.00012 (candidates per record 3 -> 5; blocking +3 s,
-  features and training ~1.6x). It is the new default (`--channels combined=5`).
+  features and training ~1.6x). Adding the char-4-gram, address and reverse channels on top
+  (`combined=5,nchar=3,addr=2,rev=2`, 5.9 candidates per record, blocking 2x) is the best configuration
+  on both splits: OOF 0.99154, hold-out 0.99240, i.e. +0.0007 / +0.0006 over the baseline, of which
+  the candidate set contributes most and the retained feature groups the rest. It is the new default.
 * **The token-IDF features are an in-sample illusion**: +0.0005 OOF macro F0.5, -0.0010 on the
   hold-out, whether or not the idf is normalised by corpus size. The hold-out has 2.5x fewer Source 1
   records than the training split, and the model learned how rare a token is *in this corpus*. They are
@@ -737,7 +741,7 @@ What the table says:
   objective; the residual regret on the hold-out is 0.0004 and is the next thing to look at on the
   full data (`tools/robustness.py`).
 
-### 14.5 Error analysis after the change (OOF, shipped default, 111k entities)
+### 14.5 Error analysis after the change (OOF, combined=5 with the shipped feature set, 111k entities)
 
 | category (fix priority) | entities | macro F0.5 points lost | share of loss | records: no address | Source 1 has namesakes |
 |---|---|---|---|---|---|
@@ -767,8 +771,9 @@ entity (section 8) and where the contradiction features did not move the needle.
 
 ### 14.6 Runtime
 
-Per training run on the 5 % subset (4 cores): blocking 25 s (was 14 s; the multi-channel
-configurations cost 48-51 s), features 1.6x the previous time (5 candidates per record instead of
-3), training 320 s including the ~130 s nested decision-rule search (was 140 s). On the full data the
-candidate set grows from ~30M to ~50M pairs; the training sample stays capped at 5M rows, so training
-time grows with the rule search and the stage-1/2 OOF scoring only.
+Per training run on the 5 % subset (4 cores): blocking 50 s with the default channels (was 14 s;
+`combined=5` alone 25 s), features ~2x the previous time (5.9 candidates per record instead of 3),
+training 320 s including the ~130 s nested decision-rule search (was 140 s). On the full data the
+candidate set grows from ~30M to ~60M pairs; the training sample stays capped at 5M rows, so training
+time grows with the rule search and the stage-1/2 OOF scoring only. `--channels combined=5` is the
+switch if the full-data blocking budget is tight.

@@ -13,7 +13,7 @@
 #   DATA=dataset  WORK=work  OUT=output  LOGS=logs  ROUNDS1=150  ROUNDS2=100  PY=python3
 #   CKPT=<name>                                    # checkpoint name for train.py (default: timestamped)
 #   THRESHOLD_ARGS="--density per_class --select country"   # extra arguments for tune_thresholds.py
-#   CHANNELS="combined=5,nchar=3,addr=2,rev=2"     # blocking channels (blocking.py --channels; default in blocking.py)
+#   CHANNELS="combined=5"                          # blocking channels (blocking.py --channels; default: combined=5,nchar=3,addr=2,rev=2)
 #   POST_STEP_CMD="bash tools/sync_outputs.sh my-run"   # run after every finished step (e.g. push outputs)
 #
 # Every step writes logs/<nn>_<step>.log, prints its wall time, and leaves $WORK/.done/<step>
