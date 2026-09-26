@@ -16,8 +16,15 @@ def log(*msg):
 
 def read_tsv(path):
     """Reads a challenge TSV. quote_char=None: fields are never quoted and may contain quotes."""
-    df = pl.read_csv(path, separator="\t", quote_char=None, infer_schema=False)
-    return df.with_columns(pl.col(c).replace("", None) for c in df.columns)
+    df = pl.read_csv(path, separator="\t", quote_char=None, infer_schema_length=0)  # all columns as strings
+    return df.with_columns(pl.when(pl.col(c) == "").then(None).otherwise(pl.col(c)).alias(c) for c in df.columns)
+
+
+def left_join_ordered(df, other, on):
+    """Left join that keeps the row order of `df` on every polars version (the `maintain_order`
+    argument of DataFrame.join only exists in recent releases)."""
+    idx = "__order__"
+    return df.with_row_index(idx).join(other, on=on, how="left").sort(idx).drop(idx)
 
 
 def source_path(data_dir, split, source):

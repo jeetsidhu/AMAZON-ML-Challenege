@@ -16,6 +16,8 @@ import lightgbm as lgb
 import numpy as np
 import polars as pl
 
+from common import left_join_ordered
+
 NON_FEATURES = {"pid", "t_rid", "s_rid", "label", "fold"}
 
 LGB_PARAMS = dict(
@@ -78,8 +80,8 @@ def stage2_context(meta, p1, hn):
         (pl.col("c_s_psum") - p).alias("c_s_psum_other"),
         (pl.col("c_s_pmax") - p).alias("c_s_gap"),
     )
-    df = df.join(hn.rename({"rid": "t_rid", "a_hn": "t_hn"}), on="t_rid", how="left", maintain_order="left").join(
-        hn.rename({"rid": "s_rid", "a_hn": "s_hn"}), on="s_rid", how="left", maintain_order="left")
+    df = left_join_ordered(df, hn.rename({"rid": "t_rid", "a_hn": "t_hn"}), "t_rid")
+    df = left_join_ordered(df, hn.rename({"rid": "s_rid", "a_hn": "s_hn"}), "s_rid")
     strong = (p >= 0.5) & (pl.col("t_hn") != "")
     df = df.with_columns(
         (strong.cast(pl.Int32).sum().over("s_rid", "t_hn") - strong.cast(pl.Int32)).alias("c_hn_same_t"),

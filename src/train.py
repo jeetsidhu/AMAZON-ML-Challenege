@@ -26,7 +26,7 @@ import numpy as np
 import polars as pl
 
 import calibrate
-from common import Stage, base_args, log, split_dir
+from common import Stage, base_args, left_join_ordered, log, split_dir
 from model import house_numbers, iter_parts, part_files, stage1_features, stage2_context, to_np, train_lgb
 from pair_features import truth_pairs
 from thresholds import best_threshold, default_grid, link_table, metrics_at, sweep
@@ -50,8 +50,8 @@ def oof_predict(files, feats_fn, models, eval_fold, n):
 def assign_folds(meta, rec):
     """Adds s_fold (eval fold), t_fold and the strict train mask helpers to meta."""
     f = rec.select(pl.col("rid").cast(pl.UInt32), "fold")
-    meta = meta.join(f.rename({"rid": "s_rid", "fold": "s_fold"}), on="s_rid", how="left", maintain_order="left")
-    meta = meta.join(f.rename({"rid": "t_rid", "fold": "t_fold"}), on="t_rid", how="left", maintain_order="left")
+    meta = left_join_ordered(meta, f.rename({"rid": "s_rid", "fold": "s_fold"}), "s_rid")
+    meta = left_join_ordered(meta, f.rename({"rid": "t_rid", "fold": "t_fold"}), "t_rid")
     # decoys (t_fold == -1): fold of the best-scoring candidate of the record
     best_s_fold = (
         meta.filter(pl.col("t_fold") < 0)
@@ -59,7 +59,7 @@ def assign_folds(meta, rec):
         .unique("t_rid", keep="first")
         .select("t_rid", pl.col("s_fold").alias("decoy_fold"))
     )
-    meta = meta.join(best_s_fold, on="t_rid", how="left", maintain_order="left").with_columns(
+    meta = left_join_ordered(meta, best_s_fold, "t_rid").with_columns(
         pl.when(pl.col("t_fold") < 0).then(pl.col("decoy_fold")).otherwise(pl.col("t_fold")).cast(pl.Int8).alias("t_fold")
     ).drop("decoy_fold")
     return meta
