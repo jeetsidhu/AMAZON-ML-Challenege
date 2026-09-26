@@ -121,13 +121,16 @@ def run(args):
     files = part_files(dtr)
     feats = stage1_features(files)
     rng = np.random.default_rng(0)
+    # sample while streaming the parts: reading every feature file in full is ~10 GB on the full data
+    n_total = sum(pl.read_parquet(fpath, columns=["pid"]).height for fpath in files)
+    frac = min(1.0, args.canary_rows / max(n_total, 1))
     frames = []
     for fpath in files:
         df = pl.read_parquet(fpath, columns=["pid", "label"] + feats)
+        if frac < 1.0:
+            df = df.filter(pl.Series(rng.random(df.height) < frac))
         frames.append(df)
     df = pl.concat(frames)
-    if df.height > args.canary_rows:
-        df = df.sample(args.canary_rows, seed=0)
     df = df.join(oof.select("pid", "s_fold", "t_fold"), on="pid", how="left")
     X = to_np(df, feats)
     y = df["label"].to_numpy().astype(np.int8)

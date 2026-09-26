@@ -11,11 +11,12 @@ lexicon learned from all training pairs ("all"), exactly as at inference time.
 import json
 import multiprocessing as mp
 import os
+import shutil
 
 import polars as pl
 
 import textnorm
-from common import Stage, SOURCES, base_args, log, n_workers, read_tsv, source_path, split_dir
+from common import Stage, SOURCES, base_args, left_join_ordered, log, n_workers, read_tsv, source_path, split_dir
 
 CHUNK = 50_000
 
@@ -61,7 +62,7 @@ def run(args):
     df = pl.concat(frames).with_row_index("rid")
     if args.split == "train":
         folds = pl.read_parquet(os.path.join(out_dir, "folds.parquet"), columns=["entity_id", "fold", "group"])
-        df = df.join(folds, on="entity_id", how="left", maintain_order="left").with_columns(
+        df = left_join_ordered(df, folds, "entity_id").with_columns(
             pl.col("fold").fill_null(-1).cast(pl.Int8), pl.col("group").fill_null(0))
         lex_key = pl.when(pl.col("fold") >= 0).then("fold_" + pl.col("fold").cast(pl.String)).otherwise(pl.lit("all"))
     else:
@@ -69,22 +70,33 @@ def run(args):
     df = df.with_columns(lex_key.alias("lex_key"))
     log(f"{args.split}: {df.height} records; lexicon keys {df['lex_key'].value_counts().sort('lex_key').rows()}")
 
-    names = df["business_name"].to_list()
-    addrs = df["business_address"].to_list()
-    countries = df["country"].to_list()
-    keys = df["lex_key"].to_list()
-    jobs = [(names[i:i + CHUNK], addrs[i:i + CHUNK], countries[i:i + CHUNK], keys[i:i + CHUNK])
-            for i in range(0, len(names), CHUNK)]
-    del names, addrs, countries, keys
-    parts = []
+    n_rows = df.height
+    cols = df.select("business_name", "business_address", "country", "lex_key")
+
+    def jobs():
+        # one chunk at a time: materialising all 12.5M rows as Python lists costs several GB
+        for i in range(0, n_rows, CHUNK):
+            c = cols.slice(i, CHUNK)
+            yield (c["business_name"].to_list(), c["business_address"].to_list(), c["country"].to_list(), c["lex_key"].to_list())
+
+    # each normalised chunk is joined to its raw rows and written straight to disk; the parts are then
+    # merged with a streaming write, so memory stays at ~one chunk instead of the whole table (the
+    # blocking-feature strings of 12.5M records are ~10 GB in RAM)
+    parts_dir = os.path.join(out_dir, "records_parts")
+    shutil.rmtree(parts_dir, ignore_errors=True)
+    os.makedirs(parts_dir)
+    raw = df.drop("lex_key")
     with mp.get_context("spawn").Pool(n_workers(), initializer=_init, initargs=(lexicons,)) as pool:
-        for k, res in enumerate(pool.imap(_work, jobs, chunksize=1)):
-            parts.append(pl.DataFrame(res))
+        for k, res in enumerate(pool.imap(_work, jobs(), chunksize=1)):
+            part = pl.concat([raw.slice(k * CHUNK, CHUNK), pl.DataFrame(res)], how="horizontal")
+            part.write_parquet(os.path.join(parts_dir, f"part_{k:05d}.parquet"))
             if k % 40 == 0:
-                log(f"normalised {min((k + 1) * CHUNK, df.height)}/{df.height}")
-    norm = pl.concat(parts)
-    df = pl.concat([df.drop("lex_key"), norm], how="horizontal")
-    df.write_parquet(os.path.join(out_dir, "records.parquet"))
+                log(f"normalised {min((k + 1) * CHUNK, n_rows)}/{n_rows}")
+    del raw, df
+    out_path = os.path.join(out_dir, "records.parquet")
+    pl.scan_parquet(os.path.join(parts_dir, "part_*.parquet")).sink_parquet(out_path)
+    shutil.rmtree(parts_dir, ignore_errors=True)
+    df = pl.read_parquet(out_path, columns=["rid"])
     log("wrote", os.path.join(out_dir, "records.parquet"), df.shape)
 
 

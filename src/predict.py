@@ -12,7 +12,7 @@ import numpy as np
 import polars as pl
 
 import calibrate
-from common import Stage, base_args, log, split_dir
+from common import Stage, base_args, left_join_ordered, log, split_dir
 from decode import decode
 from model import assign, house_numbers, iter_parts, part_files, stage2_context, to_np
 
@@ -20,7 +20,7 @@ from model import assign, house_numbers, iter_parts, part_files, stage2_context,
 def write_lists(s1_ids, links, id_col, path):
     """links: (source1_entity_id, entity_id). Writes one row per Source 1 id, tab separated."""
     agg = links.group_by("source1_entity_id").agg(pl.col("entity_id").unique().sort().str.join(",").alias(id_col))
-    out = s1_ids.join(agg, on="source1_entity_id", how="left", maintain_order="left").with_columns(pl.col(id_col).fill_null(""))
+    out = left_join_ordered(s1_ids, agg, "source1_entity_id").with_columns(pl.col(id_col).fill_null(""))
     with open(path, "w", encoding="utf-8", newline="\n") as f:
         f.write(f"source1_entity_id\t{id_col}\n")
         for sid, ids in out.iter_rows():

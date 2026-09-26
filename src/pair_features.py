@@ -72,7 +72,10 @@ def context_features(c):
 
 
 def _sim(scorer, a, b):
-    return process.cpdist(a, b, scorer=scorer, workers=-1, dtype=np.float32)
+    """Pairwise (row-wise) similarity of two equally long string lists as float32."""
+    if hasattr(process, "cpdist"):  # rapidfuzz >= 3.9: parallel C++ implementation
+        return process.cpdist(a, b, scorer=scorer, workers=-1, dtype=np.float32)
+    return np.fromiter((scorer(x, y) for x, y in zip(a, b)), dtype=np.float32, count=len(a))
 
 
 def string_features(df):

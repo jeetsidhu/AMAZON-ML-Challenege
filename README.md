@@ -98,7 +98,14 @@ python src/predict.py        --data-dir $D --work-dir $W --out-dir output
 
 ### Running on Kaggle (CPU notebook, 30 GB RAM)
 
-Attach the challenge data as a dataset, then in one code cell:
+**Easiest: import `kaggle/entity_resolution_kaggle.ipynb`** (*Create → Import Notebook*), attach the challenge
+dataset, set *Accelerator = None*, and *Save Version → Save & Run All*. The notebook embeds every source file
+(works with Internet off), finds the data files by name, runs the unit tests, a smoke test on a 0.3 % slice with a
+scored hold-out, then the full pipeline (~2-2.5 h), the validator and the summary. Outputs land in
+`/kaggle/working/output` (submission), `/kaggle/working/diagnostics` and `/kaggle/working/logs`. It is generated
+from the sources by `python tools/build_kaggle_notebook.py`; regenerate after any code change.
+
+Alternatively, attach the challenge data as a dataset and use one code cell with internet on:
 
 ```bash
 %%bash
