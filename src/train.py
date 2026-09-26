@@ -232,6 +232,8 @@ def run(args):
         m2s = None
     else:
         C, cnames = stage2_context(meta, p1, house_numbers(d))
+        keep_c = [i for i, c in enumerate(cnames) if c not in drop]  # --drop-features also applies to the context features
+        C, cnames = np.ascontiguousarray(C[:, keep_c]), [cnames[i] for i in keep_c]
         f2 = f1 + ["p1"] + cnames
         X2 = np.hstack([X1, p1[s_pid, None], C[s_pid]])
         m2s = {}

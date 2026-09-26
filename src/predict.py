@@ -83,13 +83,15 @@ def resolve_policy(args, ckpt, meta_json):
     return ThresholdPolicy(meta_json["threshold"], name="model_meta_global", scale=meta_json.get("threshold_scale", "calibrated"))
 
 
-def score_test(d, files, meta, n, m1, m2, f1, use_stage2, cal, calibrated):
+def score_test(d, files, meta, n, m1, m2, f1, use_stage2, cal, calibrated, f2=None):
     p1 = np.zeros(n, dtype=np.float32)
     for df in iter_parts(files):
         pid = df["pid"].to_numpy()
         p1[pid] = m1.predict(to_np(df, f1))
     if use_stage2:
-        C, _ = stage2_context(meta, p1, house_numbers(d))
+        C, cnames = stage2_context(meta, p1, house_numbers(d))
+        if f2 is not None:  # the context columns the stage-2 model was trained with (train.py --drop-features)
+            C = np.ascontiguousarray(C[:, [cnames.index(c) for c in f2 if c in cnames]])
         p2 = np.zeros(n, dtype=np.float32)
         for df in iter_parts(files):
             pid = df["pid"].to_numpy()
@@ -129,7 +131,7 @@ def run(args):
         use_stage2 = meta_json.get("stage2", True)
         m2 = lgb.Booster(model_file=path("stage2.txt")) if use_stage2 else None
         cal = calibrate.load(path("calibration.json")) if os.path.exists(path("calibration.json")) else None
-        p1, p2 = score_test(d, files, meta, n, m1, m2, f1, use_stage2, cal, meta_json.get("threshold_scale") == "calibrated")
+        p1, p2 = score_test(d, files, meta, n, m1, m2, f1, use_stage2, cal, meta_json.get("threshold_scale") == "calibrated", meta_json.get("f2"))
         meta.with_columns(pl.Series("p1", p1), pl.Series("p2", p2)).write_parquet(cache)
         meta.with_columns(pl.Series("p1", p1), pl.Series("p2", p2)).write_parquet(os.path.join(d, "test_scores.parquet"))
 
