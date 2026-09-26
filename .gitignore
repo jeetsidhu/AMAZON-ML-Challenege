@@ -8,3 +8,8 @@ dataset/
 output/
 *.parquet
 *.npy
+split*/
+work_*/
+out_*/
+logs_*/
+*.zip
